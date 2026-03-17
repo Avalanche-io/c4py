@@ -1,0 +1,188 @@
+"""C4 ID computation — SHA-512 content identification with base58 encoding.
+
+Algorithm (SMPTE ST 2114:2017):
+    1. Compute SHA-512 digest of content (64 bytes)
+    2. Interpret digest as big-endian unsigned integer
+    3. Encode as base58 (Bitcoin alphabet, no leading-zero compression)
+    4. Pad to exactly 88 characters, prefix with "c4"
+    Result: 90-character string like c45xZeXwMSpq...
+
+Base58 alphabet: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
+(excludes 0, O, I, l to avoid visual ambiguity)
+
+Tree IDs (set identity):
+    1. Sort all IDs lexicographically (as 64-byte arrays)
+    2. Deduplicate
+    3. Build binary Merkle tree: hash pairs bottom-up
+    4. For each pair, sort the two IDs before hashing (order independence)
+    5. Hash: SHA-512(smaller_id_bytes || larger_id_bytes)
+    6. Odd ID at end of level promotes unchanged
+    7. Root of tree is the set's C4 ID
+
+Reference: /Users/joshua/ws/active/c4/oss/c4/id.go
+           /Users/joshua/ws/active/c4/oss/c4/tree.go
+"""
+
+from __future__ import annotations
+
+import hashlib
+from typing import BinaryIO
+
+# Bitcoin base58 alphabet (no 0, O, I, l)
+BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+BASE58_MAP = {c: i for i, c in enumerate(BASE58_ALPHABET)}
+
+C4_PREFIX = "c4"
+C4_ID_LENGTH = 90  # 2 prefix + 88 encoded
+DIGEST_SIZE = 64   # SHA-512 = 512 bits = 64 bytes
+
+
+class C4ID:
+    """A C4 content identifier — 64-byte SHA-512 digest with base58 string representation.
+
+    Immutable value type. Two C4IDs are equal iff their digests are equal.
+    """
+
+    __slots__ = ("_digest",)
+
+    def __init__(self, digest: bytes) -> None:
+        if len(digest) != DIGEST_SIZE:
+            raise ValueError(f"C4ID digest must be {DIGEST_SIZE} bytes, got {len(digest)}")
+        self._digest = digest
+
+    @property
+    def digest(self) -> bytes:
+        """Raw 64-byte SHA-512 digest."""
+        return self._digest
+
+    def hex(self) -> str:
+        """Hex-encoded digest."""
+        return self._digest.hex()
+
+    def is_nil(self) -> bool:
+        """True if all digest bytes are zero."""
+        return all(b == 0 for b in self._digest)
+
+    def __str__(self) -> str:
+        """90-character C4 ID string (c4 prefix + 88 base58 chars)."""
+        # Interpret digest as big-endian unsigned integer
+        num = int.from_bytes(self._digest, byteorder="big")
+
+        # Encode to base58, filling from right
+        chars = ["1"] * C4_ID_LENGTH  # '1' is base58 zero
+        chars[0] = "c"
+        chars[1] = "4"
+
+        i = C4_ID_LENGTH - 1
+        while i > 1 and num > 0:
+            num, remainder = divmod(num, 58)
+            chars[i] = BASE58_ALPHABET[remainder]
+            i -= 1
+
+        return "".join(chars)
+
+    def __repr__(self) -> str:
+        return f"C4ID('{self}')"
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, C4ID):
+            return self._digest == other._digest
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash(self._digest)
+
+    def __lt__(self, other: C4ID) -> bool:
+        return self._digest < other._digest
+
+    def __le__(self, other: C4ID) -> bool:
+        return self._digest <= other._digest
+
+    def __gt__(self, other: C4ID) -> bool:
+        return self._digest > other._digest
+
+    def __ge__(self, other: C4ID) -> bool:
+        return self._digest >= other._digest
+
+    def __bytes__(self) -> bytes:
+        return self._digest
+
+
+def identify(source: BinaryIO, *, buf_size: int = 65536) -> C4ID:
+    """Compute the C4 ID of a binary stream.
+
+    Reads the stream in chunks. Constant memory usage regardless of content size.
+    """
+    h = hashlib.sha512()
+    while True:
+        chunk = source.read(buf_size)
+        if not chunk:
+            break
+        h.update(chunk)
+    return C4ID(h.digest())
+
+
+def identify_bytes(data: bytes) -> C4ID:
+    """Compute the C4 ID of a byte string."""
+    return C4ID(hashlib.sha512(data).digest())
+
+
+def parse(s: str) -> C4ID:
+    """Parse a 90-character C4 ID string into a C4ID.
+
+    Raises ValueError if the string is not a valid C4 ID.
+    """
+    if len(s) != C4_ID_LENGTH:
+        raise ValueError(f"C4 ID must be {C4_ID_LENGTH} characters, got {len(s)}")
+    if s[:2] != C4_PREFIX:
+        raise ValueError(f"C4 ID must start with '{C4_PREFIX}', got '{s[:2]}'")
+
+    # Decode base58 to integer
+    num = 0
+    for i in range(2, C4_ID_LENGTH):
+        c = s[i]
+        val = BASE58_MAP.get(c)
+        if val is None:
+            raise ValueError(f"Invalid base58 character '{c}' at position {i}")
+        num = num * 58 + val
+
+    # Convert to 64-byte big-endian digest
+    digest = num.to_bytes(DIGEST_SIZE, byteorder="big")
+    return C4ID(digest)
+
+
+def tree_id(ids: list[C4ID]) -> C4ID:
+    """Compute the C4 ID of a set of C4 IDs (order-independent Merkle tree).
+
+    The result is the same regardless of input order — IDs are sorted and
+    deduplicated before tree construction. Each pair is sorted before hashing
+    to ensure commutativity.
+    """
+    if not ids:
+        return C4ID(b"\x00" * DIGEST_SIZE)
+    if len(ids) == 1:
+        return ids[0]
+
+    # Sort and deduplicate
+    sorted_ids = sorted(set(ids))
+
+    # Build Merkle tree bottom-up
+    level = [sid.digest for sid in sorted_ids]
+    while len(level) > 1:
+        next_level: list[bytes] = []
+        i = 0
+        while i < len(level):
+            if i + 1 < len(level):
+                a, b = level[i], level[i + 1]
+                # Sort pair for order independence
+                if a > b:
+                    a, b = b, a
+                next_level.append(hashlib.sha512(a + b).digest())
+                i += 2
+            else:
+                # Odd one promotes unchanged
+                next_level.append(level[i])
+                i += 1
+        level = next_level
+
+    return C4ID(level[0])
