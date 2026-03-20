@@ -2,7 +2,7 @@
 
 import pytest
 
-from pyc4.naturalsort import natural_sort_key
+from c4py.naturalsort import natural_sort_key
 
 
 class TestNaturalSort:

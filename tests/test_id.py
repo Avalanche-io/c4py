@@ -4,8 +4,13 @@ import json
 from io import BytesIO
 from pathlib import Path
 
-import pyc4
-from pyc4.id import C4ID, BASE58_ALPHABET, identify, identify_bytes, parse, tree_id
+import tempfile
+
+import c4py
+from c4py.id import (
+    C4ID, BASE58_ALPHABET, identify, identify_bytes, identify_file,
+    identify_files, verify, parse, tree_id,
+)
 
 VECTORS_PATH = Path(__file__).parent / "vectors" / "known_ids.json"
 
@@ -151,6 +156,12 @@ class TestParse:
         with pytest.raises(ValueError, match="Invalid base58"):
             parse("c4" + "0" * 88)
 
+    def test_overflow_value(self):
+        """C4 ID with all 'z' chars decodes to > 2^512 — must raise ValueError."""
+        import pytest
+        with pytest.raises(ValueError, match="exceeds 512-bit"):
+            parse("c4" + "z" * 88)
+
 
 class TestTreeID:
     """Tree (set) ID computation."""
@@ -176,3 +187,143 @@ class TestTreeID:
     def test_deduplication(self):
         a = identify_bytes(b"foo")
         assert tree_id([a, a]) == tree_id([a])
+
+
+class TestC4IDStringConstructor:
+    """C4ID should accept both bytes and string."""
+
+    def test_from_string(self):
+        c4id = identify_bytes(b"foo")
+        from_str = C4ID(str(c4id))
+        assert from_str == c4id
+
+    def test_repr_round_trip(self):
+        """repr() output should be copy-pasteable."""
+        c4id = identify_bytes(b"hello world")
+        restored = eval(repr(c4id))
+        assert restored == c4id
+
+    def test_invalid_string(self):
+        import pytest
+        with pytest.raises(ValueError):
+            C4ID("not a c4 id")
+
+    def test_invalid_type(self):
+        import pytest
+        with pytest.raises(TypeError):
+            C4ID(42)
+
+
+class TestC4IDBool:
+    """Nil C4ID should be falsy, non-nil truthy."""
+
+    def test_nil_is_falsy(self):
+        nil_id = C4ID(b"\x00" * 64)
+        assert not nil_id
+        assert bool(nil_id) is False
+
+    def test_non_nil_is_truthy(self):
+        c4id = identify_bytes(b"foo")
+        assert c4id
+        assert bool(c4id) is True
+
+
+class TestIdentifyFile:
+    """Convenience function for file identification."""
+
+    def test_identify_file(self, tmp_path):
+        p = tmp_path / "test.txt"
+        p.write_bytes(b"hello world")
+        c4id = identify_file(p)
+        assert c4id == identify_bytes(b"hello world")
+
+    def test_identify_file_string_path(self, tmp_path):
+        p = tmp_path / "test.txt"
+        p.write_bytes(b"foo")
+        c4id = identify_file(str(p))
+        assert c4id == identify_bytes(b"foo")
+
+    def test_identify_file_not_found(self):
+        import pytest
+        with pytest.raises(FileNotFoundError):
+            identify_file("/nonexistent/file")
+
+
+class TestVerify:
+    """Quick file verification."""
+
+    def test_verify_match(self, tmp_path):
+        p = tmp_path / "test.txt"
+        p.write_bytes(b"hello world")
+        expected = identify_bytes(b"hello world")
+        assert verify(p, expected) is True
+
+    def test_verify_mismatch(self, tmp_path):
+        p = tmp_path / "test.txt"
+        p.write_bytes(b"hello world")
+        wrong = identify_bytes(b"different content")
+        assert verify(p, wrong) is False
+
+    def test_verify_not_found(self):
+        import pytest
+        fake_id = identify_bytes(b"whatever")
+        with pytest.raises(FileNotFoundError):
+            verify("/nonexistent/file", fake_id)
+
+
+class TestIdentifyFiles:
+    """Parallel batch identification tests."""
+
+    def test_multiple_files(self, tmp_path):
+        files = {}
+        for name, content in [("a.txt", b"aaa"), ("b.txt", b"bbb"), ("c.txt", b"ccc")]:
+            p = tmp_path / name
+            p.write_bytes(content)
+            files[p.resolve()] = identify_bytes(content)
+
+        result = identify_files([tmp_path / "a.txt", tmp_path / "b.txt", tmp_path / "c.txt"])
+        for p, expected in files.items():
+            assert result[p] == expected
+
+    def test_single_worker(self, tmp_path):
+        p = tmp_path / "only.txt"
+        p.write_bytes(b"only")
+        result = identify_files([p], workers=1)
+        assert result[p.resolve()] == identify_bytes(b"only")
+
+    def test_progress_callback(self, tmp_path):
+        for name in ["x.txt", "y.txt", "z.txt"]:
+            (tmp_path / name).write_bytes(name.encode())
+
+        calls = []
+        def on_progress(path, completed, total):
+            calls.append((path, completed, total))
+
+        paths = [tmp_path / "x.txt", tmp_path / "y.txt", tmp_path / "z.txt"]
+        identify_files(paths, progress=on_progress)
+
+        assert len(calls) == 3
+        # Each call should have total == 3
+        for _, _, total in calls:
+            assert total == 3
+        # Completed values should be {1, 2, 3} (order may vary due to concurrency)
+        completed_values = {c for _, c, _ in calls}
+        assert completed_values == {1, 2, 3}
+
+    def test_nonexistent_file(self, tmp_path):
+        good = tmp_path / "good.txt"
+        good.write_bytes(b"good")
+        bad = tmp_path / "nonexistent.txt"
+
+        result = identify_files([good, bad])
+        assert result[good.resolve()] == identify_bytes(b"good")
+        assert result[bad.resolve()] is None
+
+    def test_empty_list(self):
+        result = identify_files([])
+        assert result == {}
+
+    def test_exported_from_package(self):
+        import c4py
+        assert hasattr(c4py, "identify_files")
+        assert c4py.identify_files is identify_files

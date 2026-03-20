@@ -19,14 +19,17 @@ Tree IDs (set identity):
     6. Odd ID at end of level promotes unchanged
     7. Root of tree is the set's C4 ID
 
-Reference: /Users/joshua/ws/active/c4/oss/c4/id.go
-           /Users/joshua/ws/active/c4/oss/c4/tree.go
+Reference: github.com/Avalanche-io/c4/id.go
+           github.com/Avalanche-io/c4/tree.go
 """
 
 from __future__ import annotations
 
 import hashlib
-from typing import BinaryIO
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import BinaryIO, Callable, Optional
 
 # Bitcoin base58 alphabet (no 0, O, I, l)
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -45,10 +48,21 @@ class C4ID:
 
     __slots__ = ("_digest",)
 
-    def __init__(self, digest: bytes) -> None:
-        if len(digest) != DIGEST_SIZE:
-            raise ValueError(f"C4ID digest must be {DIGEST_SIZE} bytes, got {len(digest)}")
-        self._digest = digest
+    def __init__(self, value: bytes | str) -> None:
+        """Create a C4ID from a 64-byte digest or a 90-character C4 ID string.
+
+        Both forms are accepted so that repr() output is copy-pasteable:
+            >>> c4id = C4ID('c45xZeXwMSpq...')
+            >>> C4ID(repr_string) == c4id  # True
+        """
+        if isinstance(value, str):
+            self._digest = _parse_to_digest(value)
+        elif isinstance(value, bytes):
+            if len(value) != DIGEST_SIZE:
+                raise ValueError(f"C4ID digest must be {DIGEST_SIZE} bytes, got {len(value)}")
+            self._digest = value
+        else:
+            raise TypeError(f"C4ID requires bytes or str, got {type(value).__name__}")
 
     @property
     def digest(self) -> bytes:
@@ -61,7 +75,11 @@ class C4ID:
 
     def is_nil(self) -> bool:
         """True if all digest bytes are zero."""
-        return all(b == 0 for b in self._digest)
+        return self._digest == b"\x00" * DIGEST_SIZE
+
+    def __bool__(self) -> bool:
+        """False for nil ID (all zero bytes), True otherwise."""
+        return not self.is_nil()
 
     def __str__(self) -> str:
         """90-character C4 ID string (c4 prefix + 88 base58 chars)."""
@@ -127,17 +145,79 @@ def identify_bytes(data: bytes) -> C4ID:
     return C4ID(hashlib.sha512(data).digest())
 
 
+def identify_file(path: str | os.PathLike[str], *, buf_size: int = 65536) -> C4ID:
+    """Compute the C4 ID of a file on disk.
+
+    Convenience for open + identify + close. Equivalent to:
+        with open(path, "rb") as f:
+            return identify(f)
+    """
+    with open(path, "rb") as f:
+        return identify(f, buf_size=buf_size)
+
+
+def identify_files(
+    paths: list[str | os.PathLike[str]],
+    *,
+    workers: int = 4,
+    progress: Optional[Callable[[str, int, int], None]] = None,
+) -> dict[Path, Optional[C4ID]]:
+    """Identify multiple files concurrently.
+
+    Uses ThreadPoolExecutor for I/O-bound parallelism.
+    Returns {Path: C4ID} dict. Files that cannot be read map to None.
+    Progress callback: progress(path, completed, total)
+    """
+    resolved = [Path(p).resolve() for p in paths]
+    total = len(resolved)
+    results: dict[Path, Optional[C4ID]] = {}
+
+    if total == 0:
+        return results
+
+    def _do(p: Path) -> tuple[Path, Optional[C4ID]]:
+        try:
+            return p, identify_file(p)
+        except (OSError, ValueError):
+            return p, None
+
+    completed = 0
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(_do, p): p for p in resolved}
+        for fut in as_completed(futures):
+            p, c4id = fut.result()
+            results[p] = c4id
+            completed += 1
+            if progress is not None:
+                progress(str(p), completed, total)
+
+    return results
+
+
+def verify(path: str | os.PathLike[str], expected: C4ID) -> bool:
+    """Check if a file's content matches an expected C4 ID.
+
+    Returns True if the file's C4 ID matches, False otherwise.
+    Raises FileNotFoundError if the file doesn't exist.
+    """
+    return identify_file(path) == expected
+
+
 def parse(s: str) -> C4ID:
     """Parse a 90-character C4 ID string into a C4ID.
 
     Raises ValueError if the string is not a valid C4 ID.
     """
+    return C4ID(_parse_to_digest(s))
+
+
+def _parse_to_digest(s: str) -> bytes:
+    """Parse a C4 ID string and return the raw 64-byte digest."""
     if len(s) != C4_ID_LENGTH:
         raise ValueError(f"C4 ID must be {C4_ID_LENGTH} characters, got {len(s)}")
     if s[:2] != C4_PREFIX:
         raise ValueError(f"C4 ID must start with '{C4_PREFIX}', got '{s[:2]}'")
 
-    # Decode base58 to integer
     num = 0
     for i in range(2, C4_ID_LENGTH):
         c = s[i]
@@ -146,9 +226,10 @@ def parse(s: str) -> C4ID:
             raise ValueError(f"Invalid base58 character '{c}' at position {i}")
         num = num * 58 + val
 
-    # Convert to 64-byte big-endian digest
-    digest = num.to_bytes(DIGEST_SIZE, byteorder="big")
-    return C4ID(digest)
+    if num.bit_length() > 512:
+        raise ValueError("C4 ID value exceeds 512-bit range")
+
+    return num.to_bytes(DIGEST_SIZE, byteorder="big")
 
 
 def tree_id(ids: list[C4ID]) -> C4ID:
