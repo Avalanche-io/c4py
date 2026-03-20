@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "C4 universal content identification — SMPTE ST 2114:2017"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"
+license = "Apache-2.0"
 authors = [
     { name = "Joshua Kolden", email = "joshua@avalanche.io" },
 ]
@@ -16,7 +16,7 @@ keywords = ["c4", "content-addressing", "hash", "identification", "smpte", "c4m"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",

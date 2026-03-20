@@ -1,7 +1,7 @@
 # c4py
 
 [![CI](https://github.com/Avalanche-io/c4py/actions/workflows/ci.yml/badge.svg)](https://github.com/Avalanche-io/c4py/actions/workflows/ci.yml)
-[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org)
 [![Tests](https://img.shields.io/badge/tests-418-brightgreen.svg)](./tests)
 
