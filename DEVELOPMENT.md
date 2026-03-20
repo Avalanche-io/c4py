@@ -138,7 +138,7 @@ Key interop points:
 
 ### Phase 3: Future (v0.2.0+)
 
-- c4d client integration (absorb current c4-python code)
+- Network client integration (absorb current c4-python code)
 - c4git Python API
 - Performance: optional C extension for SHA-512 (hashlib is already C-backed)
 

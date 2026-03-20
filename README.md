@@ -175,6 +175,10 @@ c4py produces byte-identical output to the [Go reference implementation](https:/
 
 Zero external dependencies. Pure Python. Works offline.
 
+## Design Decisions
+
+See the [FAQ](https://github.com/Avalanche-io/c4/blob/main/docs/faq.md) for design decisions including SHA-512 permanence, the c4m format, and content store scaling.
+
 ## License
 
 MIT
