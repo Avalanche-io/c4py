@@ -181,4 +181,4 @@ See the [FAQ](https://github.com/Avalanche-io/c4/blob/main/docs/faq.md) for desi
 
 ## License
 
-MIT
+Apache 2.0
