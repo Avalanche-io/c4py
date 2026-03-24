@@ -102,8 +102,9 @@ class Entry:
         null values as '-', UTC timestamps with Z suffix.
         In canonical mode, null mode is '-' (single char), not '----------'.
         """
-        # Mode: null mode is "-" in canonical form
-        if self.mode == 0 and not self.is_dir() and not self.is_symlink():
+        # Mode: null mode is always "-" in canonical form, regardless of
+        # whether the entry is a directory (trailing /) or anything else.
+        if self.mode == 0:
             mode_str = "-"
         else:
             mode_str = format_mode(self.mode)
@@ -147,9 +148,9 @@ class Entry:
         """
         indent = " " * (self.depth * indent_width)
 
-        # Mode: in Format (non-canonical), null mode is "----------"
-        if self.mode == 0 and not self.is_dir() and not self.is_symlink():
-            mode_str = "----------"
+        # Mode: null mode is "-" in format (canonical with indentation)
+        if self.mode == 0:
+            mode_str = "-"
         else:
             mode_str = format_mode(self.mode)
 

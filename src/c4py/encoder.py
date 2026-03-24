@@ -137,7 +137,7 @@ def _format_entry_pretty(
     indent = " " * (entry.depth * indent_width)
 
     # Format mode (handle null value)
-    if entry.mode == 0 and not entry.is_dir() and not entry.is_symlink():
+    if entry.mode == 0:
         mode_str = "----------"
     else:
         mode_str = format_mode(entry.mode)

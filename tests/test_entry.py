@@ -198,6 +198,28 @@ class TestCanonical:
             "c41j3C6Jqga95PL2zmZVBWixAUhoWDNmwamiWiNTDAMRL1UWqe4WdtYjSozRijRSokEsaTnYyxoCBt43u4sfqWG2uB"
         )
 
+    def test_null_mode_on_directory(self):
+        """Null mode on directory entry still renders as '-' in canonical."""
+        e = Entry(
+            name="data/",
+            mode=0,
+            timestamp=self.TEST_TIME,
+            size=NULL_SIZE,
+        )
+        assert e.is_dir(), "trailing slash makes it a directory"
+        assert e.has_null_mode(), "mode 0 is null"
+        assert e.canonical() == "- 2024-01-15T10:30:00Z - data/ -"
+
+    def test_null_mode_on_directory_format(self):
+        """Null mode on directory entry renders as '-' in format (canonical with indent)."""
+        e = Entry(
+            name="data/",
+            mode=0,
+            timestamp=self.TEST_TIME,
+            size=NULL_SIZE,
+        )
+        assert e.format() == "- 2024-01-15T10:30:00Z - data/ -"
+
     def test_null_size(self):
         e = Entry(
             name="partial.txt",

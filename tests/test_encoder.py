@@ -52,8 +52,8 @@ class TestCanonicalOutput:
         )
         m = Manifest(entries=[e])
         text = dumps(m)
-        # In Format (non-canonical), null mode is "----------"
-        assert text == "---------- - - file.txt -\n"
+        # Null mode renders as "-" in canonical/format output
+        assert text == "- - - file.txt -\n"
 
     def test_directory_entry(self):
         e = Entry(
