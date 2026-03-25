@@ -236,10 +236,13 @@ def _identify_and_store(
 ) -> C4ID | None:
     """Compute C4 ID of a file, optionally storing it.
 
-    For files <= 100 MB: read into memory, use identify_bytes + store.put(BytesIO).
-    For files > 100 MB: use temp file to avoid excessive memory.
-    If no store, just stream-identify directly.
+    For files <= 100 MB: read into memory, canonicalize if c4m, then
+    identify + store. For files > 100 MB: use temp file.
+    If no store, just identify directly (identify_file handles canonicalization).
     """
+    from .canonical import try_canonicalize
+    from .id import identify_file as id_file
+
     if store is None:
         return _identify_file(fpath)
 
@@ -249,6 +252,12 @@ def _identify_and_store(
             data = fpath.read_bytes()
         except OSError:
             return None
+
+        # Canonicalize c4m content
+        canonical = try_canonicalize(data)
+        if canonical is not None:
+            data = canonical
+
         c4id = identify_bytes(data)
         store.put(io.BytesIO(data))
         return c4id
@@ -265,10 +274,10 @@ def _identify_and_store(
                             break
                         tmp.write(chunk)
 
-            # Identify from temp file
-            c4id = _identify_file(Path(tmp_path))
+            # Identify from temp file (identify_file handles canonicalization)
+            c4id = id_file(Path(tmp_path))
 
-            # Store from temp file
+            # Store from temp file (store.put handles canonicalization)
             with open(tmp_path, "rb") as f:
                 store.put(f)
 
@@ -284,10 +293,11 @@ def _identify_and_store(
 
 
 def _identify_file(fpath: Path) -> C4ID | None:
-    """Compute C4 ID of a file by streaming."""
+    """Compute C4 ID of a file, canonicalizing c4m content."""
+    from .id import identify_file as id_file
+
     try:
-        with open(fpath, "rb") as f:
-            return identify(f)
+        return id_file(fpath)
     except OSError:
         return None
 

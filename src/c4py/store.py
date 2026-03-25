@@ -105,19 +105,30 @@ class FSStore(Store):
         return open(path, "rb")
 
     def put(self, source: BinaryIO) -> C4ID:
-        """Store content and return its C4 ID. Atomic: fsync + rename."""
+        """Store content and return its C4 ID. Atomic: fsync + rename.
+
+        If the content parses as a valid c4m file, the canonical form is
+        stored and hashed instead of the raw bytes. This ensures that
+        c4m content identity is always based on canonical form.
+        """
+        from .canonical import try_canonicalize
+
+        data = source.read()
+
+        # Canonicalize c4m content before storing
+        canonical = try_canonicalize(data)
+        if canonical is not None:
+            data = canonical
+
         self.root.mkdir(parents=True, exist_ok=True)
 
         fd, tmp_path = tempfile.mkstemp(dir=self.root, prefix=".ingest.")
         try:
             h = hashlib.sha512()
+            h.update(data)
+
             with os.fdopen(fd, "wb") as tmp:
-                while True:
-                    chunk = source.read(65536)
-                    if not chunk:
-                        break
-                    h.update(chunk)
-                    tmp.write(chunk)
+                tmp.write(data)
                 tmp.flush()
                 os.fsync(tmp.fileno())
 
