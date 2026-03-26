@@ -83,8 +83,8 @@
   "manifest_vectors": [
     {
       "description": "simple project with one file and one directory",
-      "canonical": "-rw-r--r-- 2025-06-15T12:00:00Z 3 README.md c45xZeXwMSpqXjpDumcHMA6mhoAmGHkUo7r9WmN2UgSEQzj9KjgseaQdkEJ11fGb5S1WEENcV3q8RFWwEeVpC7Fjk2\n-rwxr-xr-x 2025-06-15T12:00:00Z 3 src/ -\n  -rw-r--r-- 2025-06-15T12:00:00Z 3 main.go c45KgBYEvEE7Yfv16JAgnUT29bon2WsYAiBFZvnKNJiQR8kya2tRtEdfD6vi8bjvmmDDrepEGmkNvk88M8NWdeV9ig\n",
-      "manifest_c4id": "c42gRyyKWwPoJrZL8DjYFDWBSHRzTAoE5JqBpUxnK6i6utEpCcC3Qn8Mg8otvjM79nZyPfkAxmjF74JEqnxknyzUmo"
+      "canonical": "-rw-r--r-- 2025-06-15T12:00:00Z 3 README.md c45xZeXwMSpqXjpDumcHMA6mhoAmGHkUo7r9WmN2UgSEQzj9KjgseaQdkEJ11fGb5S1WEENcV3q8RFWwEeVpC7Fjk2\n-rwxr-xr-x 2025-06-15T12:00:00Z 136 src/ -\n  -rw-r--r-- 2025-06-15T12:00:00Z 3 main.go c45KgBYEvEE7Yfv16JAgnUT29bon2WsYAiBFZvnKNJiQR8kya2tRtEdfD6vi8bjvmmDDrepEGmkNvk88M8NWdeV9ig\n",
+      "manifest_c4id": "c41wTSeGA3GcrWobYqfmHPsw3dN6onn6e5ggoSio8WBzPGf56qWHWQLU1uW1vRPHu5xfc8JNeZNF3u9dz6yqajnaVE"
     }
   ]
 }

@@ -355,13 +355,27 @@ def _get_directory_children(entries: list[Entry], dir_entry: Entry, dir_idx: int
 
 
 def _calculate_directory_size(children: list[Entry]) -> int:
-    """Compute total size of direct children. Nil-infectious."""
+    """Compute total size of direct children plus the byte length of the
+    directory's own canonical c4m content.  Nil-infectious."""
     total = 0
     for e in children:
         if e.size < 0:
             return NULL_SIZE
         total += e.size
+    total += _c4m_content_size(children)
     return total
+
+
+def _c4m_content_size(children: list[Entry]) -> int:
+    """Byte length of the canonical c4m text for one directory level.
+
+    Each child's canonical line is encoded as UTF-8 and followed by a newline.
+    This mirrors the Go reference ``c4mContentSize``.
+    """
+    n = 0
+    for e in children:
+        n += len(e.canonical().encode("utf-8")) + 1  # +1 for '\n'
+    return n
 
 
 def _get_most_recent_modtime(children: list[Entry]) -> datetime:

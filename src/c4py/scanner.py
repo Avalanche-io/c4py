@@ -325,6 +325,10 @@ def _propagate_metadata(entries: list[Entry]) -> None:
                     null_found = True
                     break
                 total += child.size
+            if not null_found:
+                # Add the byte length of the directory's canonical c4m content
+                for child in children:
+                    total += len(child.canonical().encode("utf-8")) + 1  # +1 for '\n'
             entry.size = -1 if null_found else total
 
         # Propagate timestamp if null
