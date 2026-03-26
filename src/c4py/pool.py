@@ -17,13 +17,11 @@ and copies the c4m file(s) into the working directory.
 
 from __future__ import annotations
 
-import io
 import os
 import shutil
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union
 
 from .decoder import load
 from .encoder import dump
@@ -50,10 +48,10 @@ class IngestResult:
 
 
 def pool(
-    manifest_or_path: Union[Manifest, str, Path],
-    output_dir: Union[str, Path],
+    manifest_or_path: Manifest | str | Path,
+    output_dir: str | Path,
     *,
-    store: Optional[Store] = None,
+    store: Store | None = None,
 ) -> PoolResult:
     """Bundle a c4m file and its referenced objects into *output_dir*.
 
@@ -114,9 +112,9 @@ def pool(
 
 
 def ingest(
-    bundle_dir: Union[str, Path],
+    bundle_dir: str | Path,
     *,
-    store: Optional[Store] = None,
+    store: Store | None = None,
 ) -> IngestResult:
     """Absorb a pool bundle into the local store.
 
@@ -157,8 +155,8 @@ def ingest(
 # ------------------------------------------------------------------
 
 def _resolve_manifest_and_path(
-    manifest_or_path: Union[Manifest, str, Path],
-) -> tuple[Manifest, Optional[str]]:
+    manifest_or_path: Manifest | str | Path,
+) -> tuple[Manifest, str | None]:
     """Return (manifest, original_file_path_or_None)."""
     if isinstance(manifest_or_path, Manifest):
         return manifest_or_path, None
@@ -173,7 +171,7 @@ def _copy_store_objects(
     result: IngestResult,
 ) -> None:
     """Walk *src_dir* and copy every C4 object into *dst*."""
-    from .id import C4ID, C4_ID_LENGTH
+    from .id import C4_ID_LENGTH, C4ID
 
     for dirpath_str, _dirnames, filenames in os.walk(str(src_dir)):
         for fname in filenames:

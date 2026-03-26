@@ -13,9 +13,6 @@ Reference: design/c4m-canonical-storage.md
 
 from __future__ import annotations
 
-import re
-
-
 # Mode line pattern: line starts with a valid mode character or 10-char perm string.
 # Valid first characters: '-' (file/null), 'd' (dir), 'l' (link), 'p' (pipe),
 # 's' (socket), 'b' (block), 'c' (char)

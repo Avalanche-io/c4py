@@ -10,9 +10,9 @@ This is the engine behind `python -m c4py verify` and the c4py.verify_tree() API
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Optional, Union
 
 from .id import C4ID, identify_file
 from .manifest import Manifest
@@ -46,10 +46,10 @@ ProgressCallback = Callable[[str, int, int], None]
 
 
 def verify_tree(
-    manifest_or_path: Union[Manifest, str, Path],
-    directory: Union[str, Path],
+    manifest_or_path: Manifest | str | Path,
+    directory: str | Path,
     *,
-    progress: Optional[ProgressCallback] = None,
+    progress: ProgressCallback | None = None,
 ) -> VerifyReport:
     """Compare a manifest against a real directory.
 
@@ -62,7 +62,7 @@ def verify_tree(
         VerifyReport with ok, missing, corrupt, and extra lists
     """
     # Load manifest if given a path
-    if isinstance(manifest_or_path, (str, Path)):
+    if isinstance(manifest_or_path, str | Path):
         from .decoder import load
         manifest = load(str(manifest_or_path))
     else:

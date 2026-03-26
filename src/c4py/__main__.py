@@ -19,9 +19,9 @@ from pathlib import Path
 def _cmd_id(args: argparse.Namespace) -> int:
     """Identify a file or directory."""
     from . import __version__  # noqa: F401
+    from .encoder import dumps
     from .id import identify_file
     from .scanner import scan
-    from .encoder import dumps
 
     target = Path(args.path)
 

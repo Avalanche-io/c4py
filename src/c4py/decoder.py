@@ -24,31 +24,31 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from typing import IO, Union
+from typing import IO
 
 from .entry import (
+    NULL_SIZE,
+    NULL_TIMESTAMP,
     SEQUENCE_PATTERN,
     Entry,
     FlowDirection,
-    NULL_SIZE,
-    NULL_TIMESTAMP,
     parse_mode,
 )
-from .id import C4ID, C4_ID_LENGTH, parse
+from .id import C4_ID_LENGTH, C4ID, parse
 from .manifest import Manifest
 
 # C4 ID pattern: c4 followed by 88 base58 characters
 _C4ID_PATTERN = re.compile(r"^c4[1-9A-HJ-NP-Za-km-z]{88}$")
 
 
-def load(source: Union[str, IO[str]]) -> Manifest:
+def load(source: str | IO[str]) -> Manifest:
     """Load a c4m manifest from a file path or text stream.
 
     Args:
         source: file path (str) or text-mode file object
     """
     if isinstance(source, str):
-        with open(source, "r", encoding="utf-8") as f:
+        with open(source, encoding="utf-8") as f:
             return loads(f.read())
     return loads(source.read())
 

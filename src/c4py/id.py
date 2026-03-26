@@ -27,9 +27,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import BinaryIO, Callable, Optional
+from typing import BinaryIO
 
 # Bitcoin base58 alphabet (no 0, O, I, l)
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -177,8 +178,8 @@ def identify_files(
     paths: list[str | os.PathLike[str]],
     *,
     workers: int = 4,
-    progress: Optional[Callable[[str, int, int], None]] = None,
-) -> dict[Path, Optional[C4ID]]:
+    progress: Callable[[str, int, int], None] | None = None,
+) -> dict[Path, C4ID | None]:
     """Identify multiple files concurrently.
 
     Uses ThreadPoolExecutor for I/O-bound parallelism.
@@ -187,12 +188,12 @@ def identify_files(
     """
     resolved = [Path(p).resolve() for p in paths]
     total = len(resolved)
-    results: dict[Path, Optional[C4ID]] = {}
+    results: dict[Path, C4ID | None] = {}
 
     if total == 0:
         return results
 
-    def _do(p: Path) -> tuple[Path, Optional[C4ID]]:
+    def _do(p: Path) -> tuple[Path, C4ID | None]:
         try:
             return p, identify_file(p)
         except (OSError, ValueError):

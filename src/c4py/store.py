@@ -27,7 +27,7 @@ import os
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import BinaryIO, Optional, Union
+from typing import BinaryIO
 
 from .id import C4ID
 
@@ -71,7 +71,7 @@ class Store(ABC):
         ...
 
 
-class ContentNotFound(Exception):
+class ContentNotFound(Exception):  # noqa: N818
     """Raised when a C4 ID is not found in the store."""
 
     def __init__(self, c4id: C4ID) -> None:
@@ -89,7 +89,7 @@ class FSStore(Store):
     readable here, and vice versa.
     """
 
-    def __init__(self, root: Union[str, Path], *, split_threshold: int = SPLIT_THRESHOLD) -> None:
+    def __init__(self, root: str | Path, *, split_threshold: int = SPLIT_THRESHOLD) -> None:
         self.root = Path(root)
         self.split_threshold = split_threshold
 
@@ -201,7 +201,7 @@ class FSStore(Store):
             os.replace(str(f), str(subdir / name))
 
 
-def open_store(path: Optional[Union[str, Path]] = None) -> FSStore:
+def open_store(path: str | Path | None = None) -> FSStore:
     """Open or discover a content store.
 
     Resolution order:
@@ -233,7 +233,7 @@ def open_store(path: Optional[Union[str, Path]] = None) -> FSStore:
     )
 
 
-def _read_config_store() -> Optional[str]:
+def _read_config_store() -> str | None:
     """Read the store path from ~/.c4/config."""
     try:
         for line in CONFIG_FILE.read_text().splitlines():

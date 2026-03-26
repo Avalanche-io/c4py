@@ -13,7 +13,6 @@ import stat
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
 
 from .id import C4ID
 
@@ -48,7 +47,7 @@ class Entry:
     mode: int = 0  # os.FileMode compatible (0 = null)
     timestamp: datetime = field(default_factory=lambda: NULL_TIMESTAMP)
     size: int = NULL_SIZE  # -1 = null
-    c4id: Optional[C4ID] = None
+    c4id: C4ID | None = None
     depth: int = 0
 
     # Link fields

@@ -10,10 +10,9 @@ Reference: github.com/Avalanche-io/c4/c4m/encoder.go
 from __future__ import annotations
 
 from datetime import datetime
-from typing import IO, Union
+from typing import IO
 
 from .entry import (
-    NULL_SIZE,
     NULL_TIMESTAMP,
     Entry,
     FlowDirection,
@@ -24,7 +23,7 @@ from .entry import (
 from .manifest import Manifest
 
 
-def dump(manifest: Manifest, dest: Union[str, IO[str]], *, pretty: bool = False) -> None:
+def dump(manifest: Manifest, dest: str | IO[str], *, pretty: bool = False) -> None:
     """Write a manifest to a file path or text stream.
 
     Args:
@@ -109,7 +108,10 @@ def _calculate_c4id_column(m: Manifest, indent_width: int, max_size: int) -> int
         time_str = _format_timestamp_pretty(entry.timestamp)
         name_str = format_name(entry.name, entry.is_sequence)
 
-        line_len = len(indent) + len(mode_str) + 1 + len(time_str) + 1 + max_size_width + 1 + len(name_str)
+        line_len = (
+            len(indent) + len(mode_str) + 1 + len(time_str) + 1
+            + max_size_width + 1 + len(name_str)
+        )
 
         if entry.target:
             line_len += 4 + len(format_target(entry.target))  # " -> " + target

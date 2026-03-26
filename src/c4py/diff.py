@@ -29,7 +29,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .entry import Entry
 from .id import C4ID
@@ -568,15 +567,17 @@ def merge(
     remote_map = _entry_paths(remote.entries)
 
     # Collect all unique paths
-    all_paths = sorted(set(list(base_map.keys()) + list(local_map.keys()) + list(remote_map.keys())))
+    all_paths = sorted(
+        set(list(base_map.keys()) + list(local_map.keys()) + list(remote_map.keys()))
+    )
 
     merged: dict[str, Entry] = {}
     conflicts: list[Conflict] = []
 
     for p in all_paths:
-        b: Optional[Entry] = base_map.get(p)
-        loc: Optional[Entry] = local_map.get(p)
-        r: Optional[Entry] = remote_map.get(p)
+        b: Entry | None = base_map.get(p)
+        loc: Entry | None = local_map.get(p)
+        r: Entry | None = remote_map.get(p)
 
         # Only one side has it
         if b is None and loc is not None and r is None:

@@ -19,13 +19,14 @@ import io
 import os
 import stat
 import tempfile
+from collections.abc import Callable
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING
 
-from .entry import Entry, NULL_TIMESTAMP
-from .id import C4ID, identify, identify_bytes
+from .entry import NULL_TIMESTAMP, Entry
+from .id import C4ID, identify_bytes
 from .manifest import Manifest
 
 if TYPE_CHECKING:
@@ -36,12 +37,12 @@ _LARGE_FILE_THRESHOLD = 100 * 1024 * 1024  # 100 MB
 
 
 def scan(
-    path: Union[str, Path],
+    path: str | Path,
     *,
-    store: Optional[Store] = None,
+    store: Store | None = None,
     follow_symlinks: bool = False,
     compute_ids: bool = True,
-    progress: Optional[Callable[[str, int, int], None]] = None,
+    progress: Callable[[str, int, int], None] | None = None,
 ) -> Manifest:
     """Scan a directory and produce a c4m Manifest.
 
@@ -232,7 +233,7 @@ def _make_symlink_entry(
 
 
 def _identify_and_store(
-    fpath: Path, file_size: int, store: Optional[Store]
+    fpath: Path, file_size: int, store: Store | None
 ) -> C4ID | None:
     """Compute C4 ID of a file, optionally storing it.
 
