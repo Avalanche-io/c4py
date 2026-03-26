@@ -1,6 +1,6 @@
 # c4py Development Guide
 
-This document specifies the implementation requirements for c4py. The project is scaffolded — module skeletons with docstrings and type signatures exist, test vectors from the Go reference implementation are provided, and test files are ready.
+This document specifies the implementation requirements for c4py. All modules are implemented and passing tests. Test vectors from the Go reference implementation verify cross-language compatibility.
 
 ## Architecture
 
@@ -9,15 +9,15 @@ src/c4py/
   __init__.py      # Public API (complete — re-exports from modules)
   id.py            # C4 ID computation (IMPLEMENTED — 27/27 cross-language tests pass)
   store.py         # Content store (IMPLEMENTED — 13/13 tests pass, adaptive trie sharding)
-  entry.py         # Entry dataclass (partial — formatting TODO)
-  manifest.py      # Manifest type (skeleton)
-  decoder.py       # c4m parser (skeleton)
-  encoder.py       # c4m writer (skeleton)
-  naturalsort.py   # Natural sort (skeleton)
-  safename.py      # Filename encoding (skeleton)
-  scanner.py       # Directory scanner (skeleton)
-  diff.py          # Diff operations (skeleton)
-  validator.py     # Validation (skeleton)
+  entry.py         # Entry dataclass (IMPLEMENTED)
+  manifest.py      # Manifest type (IMPLEMENTED)
+  decoder.py       # c4m parser (IMPLEMENTED)
+  encoder.py       # c4m writer (IMPLEMENTED)
+  naturalsort.py   # Natural sort (IMPLEMENTED)
+  safename.py      # Filename encoding (IMPLEMENTED)
+  scanner.py       # Directory scanner (IMPLEMENTED)
+  diff.py          # Diff operations (IMPLEMENTED)
+  validator.py     # Validation (IMPLEMENTED)
 ```
 
 ## CLI Alignment (c4 v1.0.0)
@@ -38,7 +38,7 @@ Key interop points:
 - **Shared content store:** TreeStore adaptive trie, same config (`C4_STORE` / `~/.c4/config`).
 - **`scan(store=...)` maps to `c4 id -s`:** Single-pass identify + store.
 - **Canonical output matches `c4 id`:** `c4py.dumps(manifest)` produces byte-identical output.
-- **Reconciliation:** The Go CLI has `github.com/Avalanche-io/c4/reconcile` for applying manifest state to directories. c4py does not replicate this — use the CLI for filesystem reconciliation.
+- **Reconciliation:** c4py includes a full reconcile module (`reconcile.py`) and workspace module (`workspace.py`) for applying manifest state to directories, matching the Go `reconcile` package.
 
 ## Implementation Priority
 
