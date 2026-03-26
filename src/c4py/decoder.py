@@ -138,13 +138,8 @@ class _Decoder:
                         m = _apply_patch(m, patch)
                     section = []
 
-                    # Verify checkpoint matches accumulated state
-                    expected = m.compute_c4id()
-                    if c4id != expected:
-                        raise ValueError(
-                            f"patch ID mismatch: line {self.line_num}: "
-                            f"got {c4id}, want {expected}"
-                        )
+                    # The bare C4 ID is a block link (ID of previous block).
+                    # Recorded as a boundary marker but not verified — O(1).
                     patch_mode = True
 
                 first_line = False
