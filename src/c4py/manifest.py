@@ -8,11 +8,11 @@ Reference: github.com/Avalanche-io/c4/c4m/manifest.go
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from datetime import datetime
 from fnmatch import fnmatch
-from typing import Callable, Iterator, Optional, Union
 
-from .entry import Entry, NULL_TIMESTAMP, NULL_SIZE, _human_size
+from .entry import NULL_SIZE, NULL_TIMESTAMP, Entry, _human_size
 from .id import C4ID
 
 
@@ -23,11 +23,11 @@ class Manifest:
     then natural sort within each group.
     """
 
-    def __init__(self, entries: Optional[list[Entry]] = None) -> None:
+    def __init__(self, entries: list[Entry] | None = None) -> None:
         self.entries: list[Entry] = entries or []
-        self.base: Optional[C4ID] = None  # external base reference (patch format)
-        self._range_data: dict = {}  # inline ID list data keyed by C4 ID
-        self.patch_sections: list = []  # patch chain sections
+        self.base: C4ID | None = None  # external base reference (patch format)
+        self._range_data: dict[C4ID, object] = {}  # inline ID list data keyed by C4 ID
+        self.patch_sections: list[object] = []  # patch chain sections
 
     def __iter__(self) -> Iterator[Entry]:
         return iter(self.entries)
@@ -35,7 +35,7 @@ class Manifest:
     def __len__(self) -> int:
         return len(self.entries)
 
-    def __getitem__(self, key: Union[int, str]) -> Entry:
+    def __getitem__(self, key: int | str) -> Entry:
         if isinstance(key, int):
             return self.entries[key]
         # Path-based lookup
@@ -50,9 +50,9 @@ class Manifest:
                 if path == item:
                     return True
             return False
-        return NotImplemented  # type: ignore[return-value]
+        return NotImplemented  # type: ignore[no-any-return]
 
-    def filter(self, pattern_or_func: Union[str, Callable[[str, Entry], bool]]) -> Manifest:
+    def filter(self, pattern_or_func: str | Callable[[str, Entry], bool]) -> Manifest:
         """Return a new Manifest with filtered entries.
 
         If pattern_or_func is a string, glob-match against full path.
@@ -201,7 +201,7 @@ class Manifest:
             children_of[parent_key] = deduped
 
         # Phase 3: Sort each sibling group and emit depth-first.
-        def sort_key(item: tuple[Entry, int]) -> tuple[bool, list]:
+        def sort_key(item: tuple[Entry, int]) -> tuple[bool, list[object]]:
             e = item[0]
             return (e.is_dir(), natural_sort_key(e.name))
 
@@ -270,7 +270,7 @@ class Manifest:
         # Sort: files before dirs, then natural sort
         from .naturalsort import natural_sort_key
 
-        def sort_key(e: Entry) -> tuple[bool, list]:
+        def sort_key(e: Entry) -> tuple[bool, list[object]]:
             return (e.is_dir(), natural_sort_key(e.name))
 
         top_level.sort(key=sort_key)

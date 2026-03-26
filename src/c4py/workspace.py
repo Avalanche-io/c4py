@@ -22,10 +22,10 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
 
 from .diff import DiffResult, diff
 from .manifest import Manifest
@@ -123,7 +123,7 @@ class Workspace:
         Returns:
             ReconcileResult (or ReconcilePlan if dry_run)
         """
-        if isinstance(manifest, (str, os.PathLike)):
+        if isinstance(manifest, str | os.PathLike):
             from .decoder import load
             manifest = load(str(manifest))
 
@@ -168,7 +168,9 @@ class Workspace:
             progress=progress,
         )
 
-    def reset(self, *, progress: Callable[[str, str, int, int], None] | None = None) -> ReconcileResult:
+    def reset(
+        self, *, progress: Callable[[str, str, int, int], None] | None = None,
+    ) -> ReconcileResult | ReconcilePlan:
         """Restore the directory to the last checked-out manifest.
 
         Undoes any modifications made since the last checkout.
@@ -180,7 +182,9 @@ class Workspace:
             raise RuntimeError("no manifest checked out — nothing to reset to")
         return self.checkout(self.current, progress=progress)
 
-    def diff_from_current(self, *, progress: Callable[[str, int, int], None] | None = None) -> DiffResult:
+    def diff_from_current(
+        self, *, progress: Callable[[str, int, int], None] | None = None,
+    ) -> DiffResult:
         """Compare the current directory state against the checked-out manifest.
 
         Shows what has been added, removed, or modified since checkout.
@@ -193,7 +197,7 @@ class Workspace:
         actual = scan(self.path, progress=progress)
         return diff(self.current, actual)
 
-    def status(self) -> dict:
+    def status(self) -> dict[str, object]:
         """Return workspace status information."""
         exists = self.path.exists()
         return {

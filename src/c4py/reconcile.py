@@ -13,16 +13,16 @@ from __future__ import annotations
 
 import os
 import stat
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional, Union
 
 from .decoder import load
-from .entry import Entry, NULL_TIMESTAMP
+from .entry import NULL_TIMESTAMP, Entry
 from .id import C4ID, identify_file
 from .manifest import Manifest
-from .store import FSStore, Store, open_store
+from .store import Store, open_store
 
 
 @dataclass
@@ -57,13 +57,13 @@ ProgressCallback = Callable[[str, str, int, int], None]
 
 
 def reconcile(
-    manifest_or_path: Union[Manifest, str, Path],
-    directory: Union[str, Path],
+    manifest_or_path: Manifest | str | Path,
+    directory: str | Path,
     *,
-    store: Optional[Store] = None,
+    store: Store | None = None,
     dry_run: bool = False,
-    progress: Optional[ProgressCallback] = None,
-) -> Union[ReconcileResult, ReconcilePlan]:
+    progress: ProgressCallback | None = None,
+) -> ReconcileResult | ReconcilePlan:
     """Make *directory* match *manifest_or_path*.
 
     Args:
@@ -101,7 +101,7 @@ def reconcile(
 # ------------------------------------------------------------------
 
 
-def _resolve_manifest(manifest_or_path: Union[Manifest, str, Path]) -> Manifest:
+def _resolve_manifest(manifest_or_path: Manifest | str | Path) -> Manifest:
     if isinstance(manifest_or_path, Manifest):
         return manifest_or_path
     return load(str(manifest_or_path))
@@ -176,7 +176,7 @@ def _execute_plan(
     directory: Path,
     store: Store,
     manifest: Manifest,
-    progress: Optional[ProgressCallback],
+    progress: ProgressCallback | None,
 ) -> ReconcileResult:
     result = ReconcileResult()
     total = len(plan.operations)
@@ -198,28 +198,28 @@ def _execute_plan(
         try:
             if op.type == "mkdir":
                 full.mkdir(parents=True, exist_ok=True)
-                entry = meta.get(op.path)
-                if entry is not None:
-                    _apply_dir_meta(full, entry)
-                    if entry.timestamp != NULL_TIMESTAMP:
-                        dir_timestamps.append((op.path, entry.timestamp))
+                mkdir_entry = meta.get(op.path)
+                if mkdir_entry is not None:
+                    _apply_dir_meta(full, mkdir_entry)
+                    if mkdir_entry.timestamp != NULL_TIMESTAMP:
+                        dir_timestamps.append((op.path, mkdir_entry.timestamp))
                 result.created += 1
 
             elif op.type == "create":
                 full.parent.mkdir(parents=True, exist_ok=True)
-                entry = meta.get(op.path)
-                if entry is not None and entry.c4id is not None:
-                    _write_from_store(full, entry.c4id, store)
-                    _apply_file_meta(full, entry)
+                create_entry = meta.get(op.path)
+                if create_entry is not None and create_entry.c4id is not None:
+                    _write_from_store(full, create_entry.c4id, store)
+                    _apply_file_meta(full, create_entry)
                 else:
                     full.touch()
                 result.created += 1
 
             elif op.type == "update":
-                entry = meta.get(op.path)
-                if entry is not None and entry.c4id is not None:
-                    _write_from_store(full, entry.c4id, store)
-                    _apply_file_meta(full, entry)
+                update_entry = meta.get(op.path)
+                if update_entry is not None and update_entry.c4id is not None:
+                    _write_from_store(full, update_entry.c4id, store)
+                    _apply_file_meta(full, update_entry)
                 result.updated += 1
 
             elif op.type == "remove":
