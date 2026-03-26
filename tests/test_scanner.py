@@ -107,6 +107,22 @@ class TestScan:
         m = scan(root)
         assert len(m.entries) == 0
 
+    def test_scan_empty_subdir_has_size_zero(self, tmp_path: Path):
+        """An empty leaf directory scanned from disk has size 0, not null."""
+        root = tmp_path / "project"
+        root.mkdir()
+        (root / "file.txt").write_text("content")
+        empty_sub = root / "empty_dir"
+        empty_sub.mkdir()
+
+        m = scan(root)
+
+        empty_entry = next(e for e in m.entries if e.name == "empty_dir/")
+        assert empty_entry.size == 0, (
+            f"empty directory size should be 0, got {empty_entry.size}"
+        )
+        assert not empty_entry.has_null_size()
+
     def test_scan_skips_hidden_files(self, tmp_path: Path):
         root = tmp_path / "hidden"
         root.mkdir()

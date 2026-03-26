@@ -315,6 +315,9 @@ def _propagate_metadata(entries: list[Entry]) -> None:
 
         children = _get_children(entries, i)
         if not children:
+            # Empty directory: size is known to be 0, not unknown.
+            if entry.size < 0:
+                entry.size = 0
             continue
 
         # Propagate size if null
