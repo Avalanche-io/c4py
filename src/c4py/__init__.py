@@ -20,24 +20,40 @@
 
 from __future__ import annotations
 
-from .id import C4ID, identify, identify_bytes, identify_file, identify_files, verify, parse, tree_id
-from .manifest import Manifest
-from .entry import Entry
-from .diff import (
-    Conflict, DiffResult, PatchInfo,
-    diff, patch_diff, apply_patch, resolve_chain, log_chain, merge,
-)
 from .decoder import load, loads
+from .diff import (
+    Conflict,
+    DiffResult,
+    PatchInfo,
+    apply_patch,
+    diff,
+    log_chain,
+    merge,
+    patch_diff,
+    resolve_chain,
+)
 from .encoder import dump, dumps
+from .entry import Entry
+from .id import (
+    C4ID,
+    identify,
+    identify_bytes,
+    identify_file,
+    identify_files,
+    parse,
+    tree_id,
+    verify,
+)
+from .manifest import Manifest
+from .pool import IngestResult, PoolResult, ingest, pool
+from .reconcile import ReconcileOp, ReconcilePlan, ReconcileResult, reconcile
 from .scanner import scan
 from .store import ContentNotFound, FSStore, Store, open_store
-from .reconcile import ReconcileOp, ReconcilePlan, ReconcileResult, reconcile
-from .pool import IngestResult, PoolResult, ingest, pool
 from .validator import ValidationResult, validate
 from .verify import CorruptEntry, VerifyReport, verify_tree
 from .workspace import Workspace
 
-__version__ = "1.0.0"
+__version__ = "1.0.10"
 
 __all__ = [
     # Identification

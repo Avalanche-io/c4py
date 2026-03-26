@@ -4,8 +4,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 from c4py.encoder import dump
 from c4py.id import identify_bytes, identify_file
 from c4py.scanner import scan
@@ -41,7 +39,7 @@ class TestVersion:
         result = _run_c4py("version")
         assert result.returncode == 0
         assert "c4py" in result.stdout
-        assert "1.0.0" in result.stdout
+        assert "1.0.10" in result.stdout
 
     def test_version_no_stderr(self):
         result = _run_c4py("version")
@@ -238,7 +236,11 @@ class TestCatCommand:
             capture_output=True,
             text=True,
             timeout=30,
-            env={**dict(__import__("os").environ), "C4_STORE": "", "HOME": "/tmp/c4py_test_no_home"},
+            env={  # noqa: E501
+                **dict(__import__("os").environ),
+                "C4_STORE": "",
+                "HOME": "/tmp/c4py_test_no_home",
+            },
         )
         assert result.returncode == 1
         assert "error" in result.stderr.lower()
