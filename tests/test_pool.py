@@ -1,12 +1,8 @@
 """Tests for pool and ingest — portable content bundles."""
 
 import os
-from io import BytesIO
 from pathlib import Path
 
-import pytest
-
-from c4py.id import identify_bytes
 from c4py.manifest import Manifest
 from c4py.pool import IngestResult, PoolResult, ingest, pool
 from c4py.scanner import scan
@@ -225,7 +221,7 @@ class TestPoolIngestRoundTrip:
 
     def test_round_trip_then_reconcile(self, tmp_path: Path):
         """Full cycle: scan -> pool -> ingest -> reconcile."""
-        from c4py.reconcile import reconcile, ReconcileResult
+        from c4py.reconcile import ReconcileResult, reconcile
 
         manifest, store, src = _make_project(tmp_path)
         bundle = tmp_path / "bundle"

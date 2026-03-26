@@ -4,20 +4,18 @@ from copy import deepcopy
 from datetime import datetime, timezone
 
 from c4py.diff import (
-    Conflict,
     DiffResult,
-    PatchInfo,
+    _entries_identical,
+    _entry_paths,
     apply_patch,
     diff,
     log_chain,
     merge,
     patch_diff,
     resolve_chain,
-    _entry_paths,
-    _entries_identical,
 )
-from c4py.entry import Entry, NULL_TIMESTAMP, NULL_SIZE
-from c4py.id import identify_bytes, C4ID
+from c4py.entry import Entry
+from c4py.id import identify_bytes
 from c4py.manifest import Manifest
 
 
@@ -207,7 +205,7 @@ class TestPatchRoundTrip:
         old = Manifest(entries=deepcopy(entries))
         new = Manifest(entries=deepcopy(entries))
         patch_text = patch_diff(old, new)
-        lines = [l for l in patch_text.split("\n") if l.strip()]
+        lines = [line for line in patch_text.split("\n") if line.strip()]
         # Should only have the base C4 ID line, no patch entries
         assert len(lines) == 1
         assert lines[0].startswith("c4")

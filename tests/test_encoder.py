@@ -7,12 +7,10 @@ from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
 
-import pytest
-
 from c4py.decoder import loads
 from c4py.encoder import dump, dumps
-from c4py.entry import NULL_TIMESTAMP, NULL_SIZE, Entry, FlowDirection
-from c4py.id import C4ID, parse
+from c4py.entry import NULL_SIZE, NULL_TIMESTAMP, Entry
+from c4py.id import parse
 from c4py.manifest import Manifest
 
 VECTORS_PATH = Path(__file__).parent / "vectors" / "known_ids.json"
@@ -27,7 +25,7 @@ class TestCanonicalOutput:
     """Canonical (non-pretty) output."""
 
     def test_simple_file_entry(self):
-        c4id = parse("c45xZeXwMSpqXjpDumcHMA6mhoAmGHkUo7r9WmN2UgSEQzj9KjgseaQdkEJ11fGb5S1WEENcV3q8RFWwEeVpC7Fjk2")
+        c4id = parse("c45xZeXwMSpqXjpDumcHMA6mhoAmGHkUo7r9WmN2UgSEQzj9KjgseaQdkEJ11fGb5S1WEENcV3q8RFWwEeVpC7Fjk2")  # noqa: E501
         e = Entry(
             name="README.md",
             mode=0o100644,
@@ -167,7 +165,7 @@ class TestPrettyOutput:
 
     def test_pretty_round_trip(self):
         """Pretty-encoded manifest should be decodable."""
-        c4id = parse("c45xZeXwMSpqXjpDumcHMA6mhoAmGHkUo7r9WmN2UgSEQzj9KjgseaQdkEJ11fGb5S1WEENcV3q8RFWwEeVpC7Fjk2")
+        c4id = parse("c45xZeXwMSpqXjpDumcHMA6mhoAmGHkUo7r9WmN2UgSEQzj9KjgseaQdkEJ11fGb5S1WEENcV3q8RFWwEeVpC7Fjk2")  # noqa: E501
         entries = [
             Entry(
                 name="file.txt",
@@ -226,7 +224,7 @@ class TestSortOrder:
         ]
         m = Manifest(entries=entries)
         text = dumps(m)
-        lines = [l for l in text.split("\n") if l.strip()]
+        lines = [line for line in text.split("\n") if line.strip()]
         # README.md (file) should come before src/ (directory)
         assert "README.md" in lines[0]
         assert "src/" in lines[1]
@@ -246,7 +244,7 @@ class TestSortOrder:
         ]
         m = Manifest(entries=entries)
         text = dumps(m)
-        lines = [l for l in text.split("\n") if l.strip()]
+        lines = [line for line in text.split("\n") if line.strip()]
         assert "file1.txt" in lines[0]
         assert "file2.txt" in lines[1]
         assert "file10.txt" in lines[2]

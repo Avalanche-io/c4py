@@ -1,8 +1,5 @@
 """Tests for the directory scanner."""
 
-import os
-import stat
-from io import BytesIO
 from pathlib import Path
 
 import pytest

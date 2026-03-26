@@ -2,12 +2,10 @@
 
 from pathlib import Path
 
-import pytest
-
 from c4py.encoder import dump
 from c4py.id import identify_file
 from c4py.scanner import scan
-from c4py.verify import CorruptEntry, VerifyReport, verify_tree
+from c4py.verify import verify_tree
 
 
 def _create_project(tmp_path: Path) -> Path:
@@ -222,7 +220,7 @@ class TestVerifyTreeProgress:
         def on_progress(path: str, index: int, total: int) -> None:
             calls.append((path, index, total))
 
-        report = verify_tree(manifest, root, progress=on_progress)
+        verify_tree(manifest, root, progress=on_progress)
         assert len(calls) > 0
         # All calls should have consistent total
         totals = {t for _, _, t in calls}
@@ -255,7 +253,9 @@ class TestVerifyTreeProgress:
 
         report = verify_tree(manifest, root, progress=on_progress)
         # Progress should be called for every unique path
-        expected_count = len(report.ok) + len(report.missing) + len(report.corrupt) + len(report.extra)
+        expected_count = (
+            len(report.ok) + len(report.missing) + len(report.corrupt) + len(report.extra)
+        )
         assert len(paths) == expected_count
 
 

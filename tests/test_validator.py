@@ -1,9 +1,8 @@
 """Tests for manifest validation."""
 
-import stat as stat_mod
 from datetime import datetime, timezone
 
-from c4py.entry import Entry, NULL_TIMESTAMP, NULL_SIZE
+from c4py.entry import Entry
 from c4py.id import identify_bytes
 from c4py.manifest import Manifest
 from c4py.validator import (
@@ -11,8 +10,8 @@ from c4py.validator import (
     Severity,
     ValidationResult,
     validate,
-    validate_mode_string,
     validate_c4id_string,
+    validate_mode_string,
 )
 
 

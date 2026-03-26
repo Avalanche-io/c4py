@@ -1,7 +1,6 @@
 """Tests for the content store — must be compatible with Go CLI store layout."""
 
 import os
-import tempfile
 from io import BytesIO
 from pathlib import Path
 

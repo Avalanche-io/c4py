@@ -1,8 +1,6 @@
 """Tests for Workspace — directory-backed content-addressed experiment environments."""
 
-import os
 from io import BytesIO
-from pathlib import Path
 
 import pytest
 
@@ -48,7 +46,7 @@ def alt_manifest(store):
 class TestCheckout:
     def test_creates_files(self, tmp_path, store, sample_manifest):
         ws = Workspace(tmp_path / "ws", store=store)
-        result = ws.checkout(sample_manifest)
+        ws.checkout(sample_manifest)
 
         assert (tmp_path / "ws" / "a.txt").read_bytes() == b"alpha content"
         assert (tmp_path / "ws" / "b.txt").read_bytes() == b"beta content"
@@ -73,7 +71,7 @@ class TestCheckout:
 
     def test_dry_run(self, tmp_path, store, sample_manifest):
         ws = Workspace(tmp_path / "ws", store=store)
-        plan = ws.checkout(sample_manifest, dry_run=True)
+        ws.checkout(sample_manifest, dry_run=True)
         # Directory should not be fully populated in dry run
         assert ws.current is None  # not set during dry run
 
@@ -106,7 +104,7 @@ class TestCheckout:
         # New instance, same path — should have current set
         ws2 = Workspace(tmp_path / "ws", store=store)
         assert ws2.current is not None
-        result = ws2.reset()  # should work without raising
+        ws2.reset()  # should work without raising
 
 
 class TestSnapshot:
@@ -162,7 +160,7 @@ class TestDiffFromCurrent:
         ws = Workspace(tmp_path / "ws", store=store)
         ws.checkout(sample_manifest)
 
-        result = ws.diff_from_current()
+        ws.diff_from_current()
         # Should be no changes (or minimal — hidden files might differ)
 
     def test_raises_without_checkout(self, tmp_path, store):
@@ -200,7 +198,7 @@ class TestMLWorkflow:
         assert (tmp_path / "data" / "b.txt").read_bytes() == b"beta content"
 
         # Snapshot before training modifies things
-        pre_train = ws.snapshot()
+        ws.snapshot()
 
         # Simulate training corrupting data
         (tmp_path / "data" / "a.txt").write_bytes(b"training artifact")

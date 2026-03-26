@@ -1,14 +1,13 @@
 """Tests for C4M entry parsing and formatting."""
 
 import stat
-
 from datetime import datetime, timezone
 
 from c4py.entry import (
-    Entry,
-    FlowDirection,
     NULL_SIZE,
     NULL_TIMESTAMP,
+    Entry,
+    FlowDirection,
     format_mode,
     format_size,
     format_timestamp,
@@ -122,7 +121,7 @@ class TestCanonical:
     """canonical() must match Go Canonical() output."""
 
     TEST_TIME = datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
-    TEST_ID = C4ID("c41j3C6Jqga95PL2zmZVBWixAUhoWDNmwamiWiNTDAMRL1UWqe4WdtYjSozRijRSokEsaTnYyxoCBt43u4sfqWG2uB")
+    TEST_ID = C4ID("c41j3C6Jqga95PL2zmZVBWixAUhoWDNmwamiWiNTDAMRL1UWqe4WdtYjSozRijRSokEsaTnYyxoCBt43u4sfqWG2uB")  # noqa: E501
 
     def test_file_with_c4id(self):
         e = Entry(

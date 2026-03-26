@@ -10,8 +10,7 @@ from pathlib import Path
 import pytest
 
 from c4py.decoder import load, loads
-from c4py.entry import NULL_TIMESTAMP, NULL_SIZE, FlowDirection
-from c4py.id import C4ID, parse
+from c4py.entry import NULL_SIZE, NULL_TIMESTAMP, FlowDirection
 
 VECTORS_PATH = Path(__file__).parent / "vectors" / "known_ids.json"
 
@@ -25,14 +24,14 @@ class TestBasicDecoding:
     """Basic entry parsing."""
 
     def test_single_file_entry(self):
-        text = "-rw-r--r-- 2025-06-15T12:00:00Z 3 README.md c45xZeXwMSpqXjpDumcHMA6mhoAmGHkUo7r9WmN2UgSEQzj9KjgseaQdkEJ11fGb5S1WEENcV3q8RFWwEeVpC7Fjk2\n"
+        text = "-rw-r--r-- 2025-06-15T12:00:00Z 3 README.md c45xZeXwMSpqXjpDumcHMA6mhoAmGHkUo7r9WmN2UgSEQzj9KjgseaQdkEJ11fGb5S1WEENcV3q8RFWwEeVpC7Fjk2\n"  # noqa: E501
         m = loads(text)
         assert len(m) == 1
         e = m[0]
         assert e.name == "README.md"
         assert e.size == 3
         assert e.depth == 0
-        assert str(e.c4id) == "c45xZeXwMSpqXjpDumcHMA6mhoAmGHkUo7r9WmN2UgSEQzj9KjgseaQdkEJ11fGb5S1WEENcV3q8RFWwEeVpC7Fjk2"
+        assert str(e.c4id) == "c45xZeXwMSpqXjpDumcHMA6mhoAmGHkUo7r9WmN2UgSEQzj9KjgseaQdkEJ11fGb5S1WEENcV3q8RFWwEeVpC7Fjk2"  # noqa: E501
 
     def test_directory_entry(self):
         text = "-rwxr-xr-x 2025-06-15T12:00:00Z 3 src/ -\n"
@@ -251,8 +250,8 @@ class TestInlineIDLists:
 
     def test_inline_id_list_skipped(self):
         """Lines >90 chars, multiple of 90, all valid C4 IDs are range data."""
-        id1 = "c459dsjfscH38cYeXXYogktxf4Cd9ibshE3BHUo6a58hBXmRQdZrAkZzsWcbWtDg5oQstpDuni4Hirj75GEmTc1sFT"
-        id2 = "c45xZeXwMSpqXjpDumcHMA6mhoAmGHkUo7r9WmN2UgSEQzj9KjgseaQdkEJ11fGb5S1WEENcV3q8RFWwEeVpC7Fjk2"
+        id1 = "c459dsjfscH38cYeXXYogktxf4Cd9ibshE3BHUo6a58hBXmRQdZrAkZzsWcbWtDg5oQstpDuni4Hirj75GEmTc1sFT"  # noqa: E501
+        id2 = "c45xZeXwMSpqXjpDumcHMA6mhoAmGHkUo7r9WmN2UgSEQzj9KjgseaQdkEJ11fGb5S1WEENcV3q8RFWwEeVpC7Fjk2"  # noqa: E501
         inline = id1 + id2
         text = f"-rw-r--r-- 2025-06-15T12:00:00Z 3 file.txt -\n{inline}\n"
         m = loads(text)
@@ -265,7 +264,7 @@ class TestPatchChains:
 
     def test_base_ref_on_first_line(self):
         """A bare C4 ID on the first line sets the base reference."""
-        base_id = "c459dsjfscH38cYeXXYogktxf4Cd9ibshE3BHUo6a58hBXmRQdZrAkZzsWcbWtDg5oQstpDuni4Hirj75GEmTc1sFT"
+        base_id = "c459dsjfscH38cYeXXYogktxf4Cd9ibshE3BHUo6a58hBXmRQdZrAkZzsWcbWtDg5oQstpDuni4Hirj75GEmTc1sFT"  # noqa: E501
         text = f"{base_id}\n-rw-r--r-- 2025-06-15T12:00:00Z 3 file.txt -\n"
         m = loads(text)
         assert m.base is not None

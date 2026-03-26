@@ -7,11 +7,8 @@ computed from canonical bytes.
 
 from datetime import datetime, timezone
 from io import BytesIO
-from pathlib import Path
 
-import pytest
-
-from c4py.canonical import try_canonicalize, _looks_like_c4m
+from c4py.canonical import _looks_like_c4m, try_canonicalize
 from c4py.decoder import loads
 from c4py.encoder import dumps
 from c4py.entry import Entry

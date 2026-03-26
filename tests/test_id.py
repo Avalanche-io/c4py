@@ -4,12 +4,17 @@ import json
 from io import BytesIO
 from pathlib import Path
 
-import tempfile
-
 import c4py
 from c4py.id import (
-    C4ID, BASE58_ALPHABET, identify, identify_bytes, identify_file,
-    identify_files, verify, parse, tree_id,
+    BASE58_ALPHABET,
+    C4ID,
+    identify,
+    identify_bytes,
+    identify_file,
+    identify_files,
+    parse,
+    tree_id,
+    verify,
 )
 
 VECTORS_PATH = Path(__file__).parent / "vectors" / "known_ids.json"
@@ -324,6 +329,5 @@ class TestIdentifyFiles:
         assert result == {}
 
     def test_exported_from_package(self):
-        import c4py
         assert hasattr(c4py, "identify_files")
         assert c4py.identify_files is identify_files

@@ -1,18 +1,12 @@
 """Tests for reconcile — make a directory match a manifest."""
 
-import os
-import stat
 from datetime import datetime, timezone
-from io import BytesIO
 from pathlib import Path
 
-import pytest
-
 from c4py.entry import Entry
-from c4py.id import C4ID, identify_bytes
+from c4py.id import identify_bytes
 from c4py.manifest import Manifest
 from c4py.reconcile import (
-    ReconcileOp,
     ReconcilePlan,
     ReconcileResult,
     reconcile,
@@ -199,7 +193,7 @@ class TestReconcileProgress:
         def on_progress(op_type: str, path: str, index: int, total: int) -> None:
             calls.append((op_type, path, index, total))
 
-        result = reconcile(manifest, target, store=store, progress=on_progress)
+        reconcile(manifest, target, store=store, progress=on_progress)
 
         assert len(calls) > 0
         # Every call should have consistent total.

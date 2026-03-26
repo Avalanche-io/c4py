@@ -8,8 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from c4py.entry import NULL_TIMESTAMP, NULL_SIZE, Entry
-from c4py.id import C4ID, parse
+from c4py.entry import NULL_SIZE, Entry
 from c4py.manifest import Manifest
 
 VECTORS_PATH = Path(__file__).parent / "vectors" / "known_ids.json"

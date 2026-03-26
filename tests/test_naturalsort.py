@@ -1,6 +1,5 @@
 """Tests for natural sort algorithm."""
 
-import pytest
 
 from c4py.naturalsort import natural_sort_key
 
