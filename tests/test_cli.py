@@ -39,7 +39,7 @@ class TestVersion:
         result = _run_c4py("version")
         assert result.returncode == 0
         assert "c4py" in result.stdout
-        assert "1.0.11" in result.stdout
+        assert "1.0.12" in result.stdout
 
     def test_version_no_stderr(self):
         result = _run_c4py("version")
