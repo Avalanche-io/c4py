@@ -121,26 +121,37 @@ class _Decoder:
                     ) from exc
 
                 if first_line and not section:
-                    # First line of file: external base reference
+                    # First line of file: external base reference. The
+                    # accumulated state is unknowable here, so any
+                    # checkpoints below defer verification to the resolver
+                    # that fetches the base.
                     m.base = c4id
                 else:
-                    # Reject empty patch sections
-                    if patch_mode and not section:
-                        raise ValueError(
-                            f"empty patch section (line {self.line_num})"
-                        )
-
-                    # Flush current section
+                    # Bare C4 ID = checkpoint: it names the accumulated
+                    # manifest state (grammar erratum, 2026-07-13). Flush
+                    # the pending section, then verify. A checkpoint
+                    # directly following another (consecutive boundaries)
+                    # verifies the same accumulated state; at EOF the final
+                    # checkpoint is the chain's closing validator.
                     if not patch_mode:
                         m.entries.extend(section)
-                    else:
+                    elif section:
                         patch = Manifest(entries=section)
                         m = _apply_patch(m, patch)
                     section = []
-
-                    # The bare C4 ID is a block link (ID of previous block).
-                    # Recorded as a boundary marker but not verified — O(1).
                     patch_mode = True
+
+                    # A resolving decoder MUST verify checkpoints — except
+                    # after an unresolved external base reference, where the
+                    # accumulated state is unknowable here and verification
+                    # defers to the resolver that fetches the base.
+                    if m.base is None:
+                        got = m.compute_c4id()
+                        if got != c4id:
+                            raise ValueError(
+                                f"patch ID mismatch (line {self.line_num}): "
+                                f"accumulated {got}, checkpoint {c4id}"
+                            )
 
                 first_line = False
                 continue
@@ -157,14 +168,15 @@ class _Decoder:
                 section.append(entry)
             first_line = False
 
-        # Flush remaining section
+        # Flush remaining section. A stream may end without a closing
+        # validator (the final patch applies unverified); a stream whose
+        # last line was a bare C4 ID ended with its closing validator,
+        # already verified above.
         if not patch_mode:
             m.entries.extend(section)
         elif section:
             patch = Manifest(entries=section)
             m = _apply_patch(m, patch)
-        elif patch_mode:
-            raise ValueError("empty patch section (at end of input)")
 
         return m
 
