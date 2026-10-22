@@ -409,3 +409,64 @@ class TestEntriesIdentical:
         a = _make_entry("file.txt", mode=0o100644)
         b = _make_entry("file.txt", mode=0o100755)
         assert not _entries_identical(a, b)
+
+
+class TestScanLoadRoundTrip:
+    """A scanned manifest must compare equal to itself after dump + load.
+
+    scan() used to store the raw st_mode (0o100644, with S_IFREG) while the
+    decoder yields 0o644 for the same line, so every file showed as modified.
+    """
+
+    @staticmethod
+    def _tree(tmp_path):
+        root = tmp_path / "tree"
+        root.mkdir()
+        (root / "a.txt").write_text("alpha\n")
+        (root / "sub").mkdir()
+        (root / "sub" / "b.txt").write_text("beta\n")
+        (root / "sub" / "deep").mkdir()
+        (root / "sub" / "deep" / "c.txt").write_text("gamma\n")
+        return root
+
+    @staticmethod
+    def _round_trip(m):
+        import io
+
+        import c4py
+
+        buf = io.StringIO()
+        c4py.dump(m, buf)
+        return c4py.load(io.StringIO(buf.getvalue()))
+
+    def test_scanned_equals_loaded(self, tmp_path):
+        import stat
+
+        import c4py
+
+        scanned = c4py.scan(self._tree(tmp_path))
+        loaded = self._round_trip(scanned)
+
+        assert diff(loaded, scanned).is_empty
+        assert diff(scanned, loaded).is_empty
+
+        for s, ld in zip(scanned.entries, loaded.entries):
+            assert s.mode == ld.mode, s.name
+        a = next(e for e in scanned.entries if e.name == "a.txt")
+        sub = next(e for e in scanned.entries if e.name == "sub/")
+        assert stat.S_IFMT(a.mode) == 0 and stat.S_IMODE(a.mode) == a.mode
+        assert stat.S_ISDIR(sub.mode)
+
+    def test_edit_shows_only_edited_file_and_its_ancestors(self, tmp_path):
+        import c4py
+
+        root = self._tree(tmp_path)
+        loaded = self._round_trip(c4py.scan(root))
+
+        (root / "sub" / "deep" / "c.txt").write_text("gamma changed\n")
+        result = diff(loaded, c4py.scan(root))
+
+        assert not result.added and not result.removed
+        # The edited file, plus its ancestor directories whose C4 IDs
+        # change with it (directories compare by ID when both sides have one).
+        assert {e.name for e in result.modified} == {"c.txt", "deep/", "sub/"}

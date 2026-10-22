@@ -1,5 +1,6 @@
 """Tests for the directory scanner."""
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -289,3 +290,104 @@ class TestScanProgress:
         calls = []
         scan(root, progress=lambda p, c, t: calls.append((p, c, t)))
         assert len(calls) == 0
+
+
+def _paths(m: Manifest) -> dict:
+    """Map full path to entry, walking the depth-ordered entry list."""
+    out = {}
+    stack: list[str] = []
+    for e in m.entries:
+        del stack[e.depth:]
+        out["".join(stack) + e.name] = e
+        if e.is_dir():
+            stack.append(e.name)
+    return out
+
+
+def _direct_children(entries: list, dir_idx: int) -> list:
+    d = entries[dir_idx].depth
+    out = []
+    for e in entries[dir_idx + 1:]:
+        if e.depth <= d:
+            break
+        if e.depth == d + 1:
+            out.append(e)
+    return out
+
+
+def _nested_tree(tmp_path: Path) -> Path:
+    """Files at depth 0, a dir two deep (x/y/z/f.txt), a dir with two
+    subdirs that both have children (two/a/a.txt, two/b/b.txt)."""
+    root = tmp_path / "tree"
+    root.mkdir()
+    (root / "top.txt").write_text("top level file\n")
+    (root / "x").mkdir()
+    (root / "x" / "m.txt").write_text("m\n")
+    (root / "x" / "y" / "z").mkdir(parents=True)
+    (root / "x" / "y" / "z" / "f.txt").write_text("deep file\n")
+    (root / "two" / "a").mkdir(parents=True)
+    (root / "two" / "a" / "a.txt").write_text("aaa\n")
+    (root / "two" / "b").mkdir()
+    (root / "two" / "b" / "b.txt").write_text("bbbb\n")
+    return root
+
+
+class TestNestedDirectories:
+    """Directory sizes and IDs for trees nested two or more levels deep."""
+
+    def test_sibling_subdirs_nest_under_their_parent(self, tmp_path: Path):
+        # os.walk order is not tree order once two sibling directories both
+        # have children; the scanner must still place each child under its
+        # own parent.
+        m = scan(_nested_tree(tmp_path))
+        assert set(_paths(m)) == {
+            "top.txt",
+            "two/", "two/a/", "two/a/a.txt", "two/b/", "two/b/b.txt",
+            "x/", "x/m.txt", "x/y/", "x/y/z/", "x/y/z/f.txt",
+        }
+
+    def test_dir_size_sums_children_with_final_ids(self, tmp_path: Path):
+        # size(dir) = sum over direct children of child.size +
+        # len(child.canonical()) + 1, where a child directory's canonical
+        # line carries its final 90-char C4 ID, not the null '-'.
+        m = scan(_nested_tree(tmp_path))
+        entries = m.entries
+        for i, d in enumerate(entries):
+            if not d.is_dir():
+                continue
+            children = _direct_children(entries, i)
+            assert children, d.name
+            for c in children:
+                assert c.c4id is not None, f"{c.name} under {d.name} lacks an ID"
+                assert len(c.canonical().split(" ")[-1]) == 90
+            expected = sum(
+                c.size + len(c.canonical().encode("utf-8")) + 1 for c in children
+            )
+            assert d.size == expected, f"{d.name}: {d.size} != {expected}"
+
+        paths = _paths(m)
+        z, y = paths["x/y/z/"], paths["x/y/"]
+        assert z.size == 10 + len(paths["x/y/z/f.txt"].canonical()) + 1
+        assert y.size == z.size + len(z.canonical()) + 1
+
+    @pytest.mark.skipif(
+        not (shutil.which("c4") or Path("/opt/homebrew/bin/c4").is_file()),
+        reason="c4 CLI not installed",
+    )
+    def test_matches_go_cli_byte_for_byte(self, tmp_path: Path):
+        import io
+        import os
+        import subprocess
+
+        import c4py
+
+        root = _nested_tree(tmp_path)
+        c4 = shutil.which("c4") or "/opt/homebrew/bin/c4"
+        env = dict(os.environ, HOME=str(tmp_path), C4_STORE=str(tmp_path / "store"))
+        go = subprocess.run(
+            [c4, "id", str(root)], capture_output=True, text=True, check=True, env=env
+        ).stdout
+
+        buf = io.StringIO()
+        c4py.dump(c4py.scan(root), buf)
+        assert buf.getvalue() == go

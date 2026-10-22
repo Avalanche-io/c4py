@@ -231,6 +231,19 @@ def format_mode(mode: int) -> str:
     return "".join(buf)
 
 
+def normalize_mode(mode: int) -> int:
+    """Reduce a raw st_mode to the mode a c4m line can express.
+
+    Entry.mode holds exactly what parse_mode yields for the rendered
+    line, so a scanned entry compares equal to its loaded counterpart.
+    In particular the S_IFREG type bit is dropped: a regular file renders
+    as '-' and parses back without it (0o100644 becomes 0o644), the same
+    representation Go's os.FileMode uses. Directory, symlink and device
+    type bits survive the round trip and are kept.
+    """
+    return parse_mode(format_mode(mode))
+
+
 def parse_mode(s: str) -> int:
     """Parse a 10-character Unix mode string to a file mode integer.
 
