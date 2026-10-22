@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .entry import NULL_TIMESTAMP, Entry
+from .entry import NULL_TIMESTAMP, Entry, normalize_mode
 from .id import C4ID, identify_bytes
 from .manifest import Manifest
 
@@ -73,10 +73,12 @@ def scan(
     if not root.is_dir():
         raise ValueError(f"not a directory: {root}")
 
-    # Collect entries per directory for bottom-up processing
-    all_entries: list[Entry] = []
-    # Map from directory path to list of child entries for bottom-up C4 ID
-    dir_children: dict[str, list[Entry]] = {}
+    # Direct children of each directory, keyed by directory path. Each child
+    # is (entry, key of its own child list or None for non-directories).
+    # os.walk yields directories breadth-first within a parent, so its flat
+    # order is NOT tree order once two sibling directories both have
+    # children; the tree is assembled from this map after the walk.
+    dir_children: dict[str, list[tuple[Entry, str | None]]] = {}
     files_processed = 0
 
     for dirpath_str, dirnames, filenames in os.walk(
@@ -101,7 +103,7 @@ def scan(
         parts = rel.parts
         depth = len(parts)
 
-        children_for_dir: list[Entry] = []
+        children_for_dir: list[tuple[Entry, str | None]] = []
         dir_key = str(dirpath)
 
         # Process files
@@ -123,8 +125,7 @@ def scan(
             # Handle symlinks
             if stat.S_ISLNK(file_mode) and not follow_symlinks:
                 entry = _make_symlink_entry(fpath, fstat, fname, depth, compute_ids)
-                all_entries.append(entry)
-                children_for_dir.append(entry)
+                children_for_dir.append((entry, None))
                 files_processed += 1
                 if progress is not None:
                     progress(str(fpath), files_processed, 0)
@@ -133,7 +134,7 @@ def scan(
             # Regular file
             entry = Entry(
                 name=fname,
-                mode=file_mode,
+                mode=normalize_mode(file_mode),
                 timestamp=datetime.fromtimestamp(fstat.st_mtime, tz=timezone.utc),
                 size=fstat.st_size,
                 depth=depth,
@@ -142,8 +143,7 @@ def scan(
             if compute_ids and stat.S_ISREG(file_mode):
                 entry.c4id = _identify_and_store(fpath, fstat.st_size, store)
 
-            all_entries.append(entry)
-            children_for_dir.append(entry)
+            children_for_dir.append((entry, None))
             files_processed += 1
             if progress is not None:
                 progress(str(fpath), files_processed, 0)
@@ -164,34 +164,47 @@ def scan(
             # Handle symlink directories
             if stat.S_ISLNK(dir_mode) and not follow_symlinks:
                 entry = _make_symlink_entry(dpath, dstat, dname + "/", depth, compute_ids)
-                all_entries.append(entry)
-                children_for_dir.append(entry)
+                children_for_dir.append((entry, None))
                 continue
 
             entry = Entry(
                 name=dname + "/",
-                mode=dir_mode,
+                mode=normalize_mode(dir_mode),
                 timestamp=NULL_TIMESTAMP,  # will be computed bottom-up
                 size=-1,  # will be computed bottom-up
                 depth=depth,
             )
-            all_entries.append(entry)
-            children_for_dir.append(entry)
+            children_for_dir.append((entry, str(dpath)))
 
         dir_children[dir_key] = children_for_dir
 
-    # Sort entries into canonical order
+    # Assemble entries in tree order (a directory's descendants contiguous
+    # after it), which sort_entries requires to associate children with
+    # their parent.
+    all_entries: list[Entry] = []
+    _emit_tree(dir_children, str(root), all_entries)
+
+    # Sort siblings into canonical order
     manifest = Manifest(entries=all_entries)
     manifest.sort_entries()
 
-    # Compute directory sizes and timestamps bottom-up
-    _propagate_metadata(manifest.entries)
-
-    # Compute directory C4 IDs bottom-up
-    if compute_ids:
-        _compute_dir_ids(manifest)
+    # Resolve directories bottom-up: size, timestamp, then C4 ID
+    _resolve_directories(manifest.entries, compute_ids)
 
     return manifest
+
+
+def _emit_tree(
+    dir_children: dict[str, list[tuple[Entry, str | None]]],
+    dir_key: str,
+    out: list[Entry],
+) -> None:
+    """Append the entries under dir_key depth-first, each directory
+    immediately followed by its descendants."""
+    for entry, child_key in dir_children.get(dir_key, []):
+        out.append(entry)
+        if child_key is not None:
+            _emit_tree(dir_children, child_key, out)
 
 
 def _make_symlink_entry(
@@ -212,7 +225,7 @@ def _make_symlink_entry(
 
     entry = Entry(
         name=name,
-        mode=fstat.st_mode,
+        mode=normalize_mode(fstat.st_mode),
         timestamp=datetime.fromtimestamp(fstat.st_mtime, tz=timezone.utc),
         size=fstat.st_size,
         depth=depth,
@@ -303,49 +316,63 @@ def _identify_file(fpath: Path) -> C4ID | None:
         return None
 
 
-def _propagate_metadata(entries: list[Entry]) -> None:
-    """Compute directory sizes and timestamps bottom-up from children.
+def _resolve_directories(entries: list[Entry], compute_ids: bool) -> None:
+    """Resolve every directory bottom-up: size and timestamp from its
+    children, then its C4 ID.
 
-    Processes in reverse order so child directories resolve before parents.
+    Entries are visited in reverse order so each directory's descendants
+    are fully resolved before it. The order within a directory matters:
+    its size counts len(child.canonical()) + 1 per child, and a child
+    directory's canonical line carries its C4 ID, so a subdirectory's ID
+    must be final before the parent's size is summed. This matches
+    c4m.PropagateMetadata in the Go reference, which sums the *resolved*
+    canonical form of each subdirectory.
     """
     for i in range(len(entries) - 1, -1, -1):
         entry = entries[i]
         if not entry.is_dir():
             continue
-
         children = _get_children(entries, i)
-        if not children:
-            # Empty directory: size is known to be 0, not unknown.
-            if entry.size < 0:
-                entry.size = 0
-            continue
+        _propagate_metadata(entry, children)
+        if compute_ids:
+            _compute_dir_id(entries, i, children)
 
-        # Propagate size if null
+
+def _propagate_metadata(entry: Entry, children: list[Entry]) -> None:
+    """Compute a directory's size and timestamp from its direct children,
+    which must already be resolved (including subdirectory C4 IDs)."""
+    if not children:
+        # Empty directory: size is known to be 0, not unknown.
         if entry.size < 0:
-            total = 0
-            null_found = False
-            for child in children:
-                if child.size < 0:
-                    null_found = True
-                    break
-                total += child.size
-            if not null_found:
-                # Add the byte length of the directory's canonical c4m content
-                for child in children:
-                    total += len(child.canonical().encode("utf-8")) + 1  # +1 for '\n'
-            entry.size = -1 if null_found else total
+            entry.size = 0
+        return
 
-        # Propagate timestamp if null
-        if entry.has_null_timestamp():
-            most_recent = NULL_TIMESTAMP
-            null_found = False
+    # Propagate size if null
+    if entry.size < 0:
+        total = 0
+        null_found = False
+        for child in children:
+            if child.size < 0:
+                null_found = True
+                break
+            total += child.size
+        if not null_found:
+            # Add the byte length of the directory's canonical c4m content
             for child in children:
-                if child.has_null_timestamp():
-                    null_found = True
-                    break
-                if child.timestamp > most_recent:
-                    most_recent = child.timestamp
-            entry.timestamp = NULL_TIMESTAMP if null_found else most_recent
+                total += len(child.canonical().encode("utf-8")) + 1  # +1 for '\n'
+        entry.size = -1 if null_found else total
+
+    # Propagate timestamp if null
+    if entry.has_null_timestamp():
+        most_recent = NULL_TIMESTAMP
+        null_found = False
+        for child in children:
+            if child.has_null_timestamp():
+                null_found = True
+                break
+            if child.timestamp > most_recent:
+                most_recent = child.timestamp
+        entry.timestamp = NULL_TIMESTAMP if null_found else most_recent
 
 
 def _get_children(entries: list[Entry], dir_idx: int) -> list[Entry]:
@@ -364,39 +391,27 @@ def _get_children(entries: list[Entry], dir_idx: int) -> list[Entry]:
     return children
 
 
-def _compute_dir_ids(manifest: Manifest) -> None:
-    """Compute directory C4 IDs bottom-up.
+def _compute_dir_id(entries: list[Entry], dir_idx: int, children: list[Entry]) -> None:
+    """Compute a directory's C4 ID from the canonical form of its
+    immediate children (as a sub-manifest), which must be fully resolved."""
+    entry = entries[dir_idx]
+    if not children:
+        entry.c4id = identify_bytes(b"")
+        return
 
-    Each directory's C4 ID is computed from the canonical form of its
-    immediate children (as a sub-manifest).
-    """
-    entries = manifest.entries
+    # Build a sub-manifest of the directory's subtree, re-based to depth 0
+    sub_entries: list[Entry] = []
+    _collect_subtree(entries, dir_idx, sub_entries)
 
-    # Process in reverse so children are resolved before parents
-    for i in range(len(entries) - 1, -1, -1):
-        entry = entries[i]
-        if not entry.is_dir():
-            continue
+    adjusted: list[Entry] = []
+    base_depth = entry.depth + 1
+    for e in sub_entries:
+        ae = deepcopy(e)
+        ae.depth = e.depth - base_depth
+        adjusted.append(ae)
 
-        children = _get_children(entries, i)
-        if not children:
-            entry.c4id = identify_bytes(b"")
-            continue
-
-        # Build a sub-manifest of just these children (at depth 0)
-        sub_entries: list[Entry] = []
-        _collect_subtree(entries, i, sub_entries)
-
-        # Adjust depths to be relative to this directory
-        adjusted: list[Entry] = []
-        base_depth = entry.depth + 1
-        for e in sub_entries:
-            ae = deepcopy(e)
-            ae.depth = e.depth - base_depth
-            adjusted.append(ae)
-
-        sub_manifest = Manifest(entries=adjusted)
-        entry.c4id = sub_manifest.compute_c4id()
+    sub_manifest = Manifest(entries=adjusted)
+    entry.c4id = sub_manifest.compute_c4id()
 
 
 def _collect_subtree(
