@@ -26,6 +26,7 @@ import re
 from datetime import datetime, timezone
 from typing import IO
 
+from .diff import apply_patch
 from .entry import (
     NULL_SIZE,
     NULL_TIMESTAMP,
@@ -597,78 +598,13 @@ def _parse_timestamp(s: str) -> datetime:
 
 
 def _apply_patch(base: Manifest, patch: Manifest) -> Manifest:
-    """Apply a patch manifest to a base. Simplified version for decoder use."""
-    # Build path map for base
-    base_by_path: dict[str, int] = {}
-    path_stack: list[str] = []
-    for i, entry in enumerate(base.entries):
-        while len(path_stack) > entry.depth:
-            path_stack.pop()
-        full_path = "".join(path_stack) + entry.name
-        base_by_path[full_path] = i
-        if entry.is_dir():
-            path_stack.append(entry.name)
+    """Apply a patch section to the accumulated manifest.
 
-    # Apply patch entries — collect indices to remove
-    remove_indices: set[int] = set()
-    replacements: dict[int, Entry] = {}
-    added: list[Entry] = []
-
-    path_stack = []
-    for entry in patch.entries:
-        while len(path_stack) > entry.depth:
-            path_stack.pop()
-        full_path = "".join(path_stack) + entry.name
-        if entry.is_dir():
-            path_stack.append(entry.name)
-
-        if full_path in base_by_path:
-            idx = base_by_path[full_path]
-            base_entry = base.entries[idx]
-            # Exact duplicate = removal
-            if _entries_equal(base_entry, entry):
-                remove_indices.add(idx)
-                # Also remove children if it's a directory
-                if entry.is_dir():
-                    for j in range(idx + 1, len(base.entries)):
-                        if j in remove_indices:
-                            continue
-                        if base.entries[j].depth <= entry.depth:
-                            break
-                        remove_indices.add(j)
-            else:
-                # Modification
-                replacements[idx] = entry
-        else:
-            added.append(entry)
-
-    # Build result — skip removed, apply replacements
-    final: list[Entry] = []
-    for i, entry in enumerate(base.entries):
-        if i in remove_indices:
-            continue
-        if i in replacements:
-            final.append(replacements[i])
-        else:
-            final.append(entry)
-    final.extend(added)
-
-    result = Manifest(entries=final)
+    One implementation of the patch rule: ``c4py.diff.apply_patch``. The
+    decoder used to carry its own copy, which still read a directory restated
+    with children under it as a removal (erratum 2026-07-31).
+    """
+    result = apply_patch(base, patch.entries)
     result.base = base.base
+    result._range_data = base._range_data
     return result
-
-
-def _entries_equal(a: Entry, b: Entry) -> bool:
-    """Check if two entries are identical (for patch removal detection)."""
-    return (
-        a.name == b.name
-        and a.mode == b.mode
-        and a.timestamp == b.timestamp
-        and a.size == b.size
-        and a.c4id == b.c4id
-        and a.target == b.target
-        and a.hard_link == b.hard_link
-        and a.flow_direction == b.flow_direction
-        and a.flow_target == b.flow_target
-        and a.depth == b.depth
-    )

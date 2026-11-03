@@ -167,7 +167,10 @@ def patch_diff(old: Manifest, new: Manifest) -> str:
     Patch entry semantics (matched by name/path):
     - Entry only in new -> addition (entry emitted as-is)
     - Entry in both, any metadata differs -> modification (new entry emitted)
-    - Entry in both, all fields identical -> removal (exact duplicate signals deletion)
+    - Entry in both, all fields identical -> removal (exact duplicate signals
+      deletion). To remove a directory, restate it alone with no children: a
+      directory restated identically with children under it is deepened, not
+      removed (erratum 2026-07-31).
 
     This output can be appended to old.c4m to create a version chain:
         c4 diff before.c4m after.c4m >> before.c4m
@@ -257,8 +260,14 @@ def _apply_patch_tree(base: _PatchNode, patch: _PatchNode) -> None:
             base.children[name] = p_node
             continue
 
-        # Check if exact match (removal)
-        if b_node.entry is not None and p_node.entry is not None:
+        # Check if exact match (removal). A restatement that declares
+        # children under it is deepening that directory, not removing it:
+        # breadth-first discovery learns a directory's children before it
+        # learns anything about the directory itself, so its parent line is
+        # necessarily unchanged. Falling through clobbers with an identical
+        # entry (a no-op) and recurses to merge the new children.
+        # (Erratum 2026-07-31; mirrors the Go reference.)
+        if not p_node.children and b_node.entry is not None and p_node.entry is not None:
             if _entries_identical(b_node.entry, p_node.entry):
                 del base.children[name]
                 continue
@@ -287,7 +296,10 @@ def apply_patch(base: Manifest, patch_entries: list[Entry]) -> Manifest:
     """Apply patch entries to a base manifest.
 
     Semantics:
-    - Exact duplicate of base entry -> removal (entry and children deleted)
+    - Exact duplicate of base entry, with no children in the patch -> removal
+      (entry and children deleted)
+    - Exact duplicate of a directory, with children in the patch -> deepening
+      (entry unchanged; children applied recursively; erratum 2026-07-31)
     - Same path, different content -> modification (replace entry, recurse for dirs)
     - New path -> addition
 
