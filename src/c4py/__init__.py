@@ -53,7 +53,7 @@ from .validator import ValidationResult, validate
 from .verify import CorruptEntry, VerifyReport, verify_tree
 from .workspace import Workspace
 
-__version__ = "1.0.23"
+__version__ = "1.0.24"
 
 __all__ = [
     # Identification
