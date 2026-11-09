@@ -30,7 +30,7 @@ def test_checkout_of_names_only_pretty_file_removes_nothing(tmp_path: Path) -> N
     (tree / "a.txt").write_text("A\n")
     (tree / "d" / "b.txt").write_text("B\n")
 
-    ws = c4py.Workspace(tree)
+    ws = c4py.Workspace(tree, store=c4py.open_store(str(tmp_path / "store")))
     ws.checkout(c4py.load(str(LEGACY)))
 
     assert (tree / "a.txt").read_text() == "A\n"
