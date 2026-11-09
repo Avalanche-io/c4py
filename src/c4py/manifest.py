@@ -331,7 +331,7 @@ def _propagate_metadata(entries: list[Entry]) -> None:
         children = _get_directory_children(entries, entry, i)
 
         if entry.size < 0:
-            entry.size = _calculate_directory_size(children)
+            entry.size = _calculate_directory_size(entry, children)
 
         if entry.timestamp == NULL_TIMESTAMP:
             entry.timestamp = _get_most_recent_modtime(children)
@@ -354,9 +354,21 @@ def _get_directory_children(entries: list[Entry], dir_entry: Entry, dir_idx: int
     return children
 
 
-def _calculate_directory_size(children: list[Entry]) -> int:
+def _calculate_directory_size(dir_entry: Entry, children: list[Entry]) -> int:
     """Compute total size of direct children plus the byte length of the
-    directory's own canonical c4m content.  Nil-infectious."""
+    directory's own canonical c4m content.  Nil-infectious.
+
+    A directory with no listed children is empty (size 0) only when its
+    ID says so: an empty listing hashes to the empty-content ID. A
+    childless directory with no ID is one nobody read (a chmod 000
+    directory in a scan, or a hand-written line): its size stays null,
+    because 0 beside no ID would claim a known empty that nothing here
+    knows. Mirrors Go's propagateMetadata (2026-11-09).
+    """
+    if not children:
+        if dir_entry.c4id is None or dir_entry.c4id.is_nil():
+            return NULL_SIZE
+        return 0
     total = 0
     for e in children:
         if e.size < 0:

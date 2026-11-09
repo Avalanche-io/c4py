@@ -31,6 +31,42 @@ NULL_TIMESTAMP = datetime(1970, 1, 1, tzinfo=timezone.utc)
 # Sentinel for null size
 NULL_SIZE = -1
 
+# Null mode: the integer 0, written "-". Unknown permissions.
+NULL_MODE = 0
+
+# The known zero mode: a regular file with no permission bits, written
+# "----------". Not the null mode. Bit 18 is set by no operating-system
+# mode and lies above stat.S_IFMT (0o170000) and the permission mask
+# (0o7777), so ZERO_MODE acts as mode 0 everywhere a mode is applied
+# while staying distinct from null. Mirrors Go's c4m.ZeroMode = 1<<18.
+ZERO_MODE = 1 << 18
+
+
+def known_mode(mode: int) -> int:
+    """Return *mode* as a known mode.
+
+    A mode observed on disk or spelled out in ten characters is never
+    null, so an all-zero mode becomes ZERO_MODE.
+    """
+    if mode == 0:
+        return ZERO_MODE
+    return mode
+
+
+def is_null_mode(mode: int) -> bool:
+    """True if *mode* is the null (unspecified) mode."""
+    return mode == NULL_MODE
+
+
+def os_mode(mode: int) -> int:
+    """The operating-system bits of a c4m mode: type and permissions.
+
+    Strips the ZERO_MODE sentinel, so the result fits a 16-bit mode_t
+    and can be handed to the C-backed ``stat`` helpers (S_ISDIR, S_IFMT,
+    S_IMODE), which raise OverflowError on bit 18 where mode_t is 16 bits.
+    """
+    return mode & 0o177777
+
 # Sequence pattern: matches [0001-0100], [01-50,75-100], [001,005,010], etc.
 SEQUENCE_PATTERN = re.compile(r"\[([0-9,\-:]+)\]")
 
@@ -44,7 +80,7 @@ class Entry:
     """
 
     name: str
-    mode: int = 0  # os.FileMode compatible (0 = null)
+    mode: int = 0  # os.FileMode compatible (0 = null, ZERO_MODE = known zero)
     timestamp: datetime = field(default_factory=lambda: NULL_TIMESTAMP)
     size: int = NULL_SIZE  # -1 = null
     c4id: C4ID | None = None
@@ -62,11 +98,11 @@ class Entry:
 
     def is_dir(self) -> bool:
         """True if this entry is a directory."""
-        return self.name.endswith("/") or (self.mode != 0 and stat.S_ISDIR(self.mode))
+        return self.name.endswith("/") or (self.mode != 0 and stat.S_ISDIR(os_mode(self.mode)))
 
     def is_symlink(self) -> bool:
         """True if this entry is a symbolic link."""
-        return self.mode != 0 and stat.S_ISLNK(self.mode)
+        return self.mode != 0 and stat.S_ISLNK(os_mode(self.mode))
 
     def is_flow_linked(self) -> bool:
         """True if this entry has a flow link."""
@@ -187,11 +223,11 @@ class Entry:
 def format_mode(mode: int) -> str:
     """Format a file mode as a 10-character Unix mode string.
 
-    Returns '-' for null mode (0) in canonical context.
-    The caller decides whether to use '-' or '----------'.
+    The null mode (0) renders as a single '-'; the known zero (ZERO_MODE)
+    renders as ten dashes. No caller may write null as ten dashes.
     """
     if mode == 0:
-        return "----------"
+        return "-"
 
     buf = ["-"] * 10
 
@@ -199,7 +235,7 @@ def format_mode(mode: int) -> str:
     # Python stat module uses different constants than Go os.FileMode.
     # Go's os.ModeDir = 1<<31, os.ModeSymlink = 1<<27, etc.
     # Python's stat.S_IFDIR = 0o40000, stat.S_IFLNK = 0o120000, etc.
-    fmt_bits = stat.S_IFMT(mode)
+    fmt_bits = stat.S_IFMT(os_mode(mode))
     if fmt_bits == stat.S_IFDIR:
         buf[0] = "d"
     elif fmt_bits == stat.S_IFLNK:
@@ -247,9 +283,12 @@ def normalize_mode(mode: int) -> int:
 def parse_mode(s: str) -> int:
     """Parse a 10-character Unix mode string to a file mode integer.
 
-    Accepts '-' or '----------' for null mode (returns 0).
+    A single '-' is the null mode (0). Every ten-character mode is known,
+    '----------' included: it parses to ZERO_MODE, never to null. (The
+    decoder alone applies the legacy exception for ten dashes on a
+    directory line.)
     """
-    if s == "-" or s == "----------":
+    if s == "-":
         return 0
 
     if len(s) != 10:
@@ -311,7 +350,8 @@ def parse_mode(s: str) -> int:
     if perm_chars[8] in ("t", "T"):
         mode |= stat.S_ISVTX
 
-    return mode
+    # A ten-character mode is always known; all-zero is ZERO_MODE, not null.
+    return known_mode(mode)
 
 
 def format_timestamp(ts: datetime) -> str:

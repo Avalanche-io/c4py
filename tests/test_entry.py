@@ -88,8 +88,19 @@ class TestFormatMode:
         assert format_mode(stat.S_ISVTX | 0o644) == "-rw-r--r-T"
 
     def test_null_mode(self):
-        """Null mode (0) renders as '----------' from format_mode."""
-        assert format_mode(0) == "----------"
+        """Null mode (0) renders as '-'; never as ten dashes."""
+        assert format_mode(0) == "-"
+
+    def test_zero_mode(self):
+        """The known zero (ZERO_MODE) renders as ten dashes."""
+        from c4py.entry import ZERO_MODE, known_mode, parse_mode
+
+        assert format_mode(ZERO_MODE) == "----------"
+        assert parse_mode("----------") == ZERO_MODE
+        assert parse_mode("-") == 0
+        assert known_mode(0) == ZERO_MODE
+        assert known_mode(0o644) == 0o644
+        assert stat.S_IMODE(ZERO_MODE & 0o177777) == 0
 
 
 class TestEntry:

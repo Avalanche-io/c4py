@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .entry import NULL_SIZE, NULL_TIMESTAMP, Entry
+from .entry import NULL_SIZE, NULL_TIMESTAMP, Entry, os_mode
 from .id import BASE58_ALPHABET, C4_ID_LENGTH, C4_PREFIX
 from .manifest import Manifest
 
@@ -213,7 +213,7 @@ def _validate_mode(entry: Entry, line: int, result: ValidationResult) -> None:
     # The validator checks that the mode makes sense for the entry type.
     import stat as stat_mod
 
-    fmt = stat_mod.S_IFMT(mode)
+    fmt = stat_mod.S_IFMT(os_mode(mode))
     valid_types = {
         stat_mod.S_IFREG,
         stat_mod.S_IFDIR,
@@ -318,7 +318,8 @@ def validate_mode_string(mode_str: str) -> list[str]:
     """
     errors: list[str] = []
 
-    # Null mode
+    # Null mode ("-") and the known zero mode ("----------") are both valid
+    # spellings; they are different values (SPECIFICATION.md "Mode").
     if mode_str in ("-", "----------"):
         return errors
 

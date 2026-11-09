@@ -138,11 +138,10 @@ def _format_entry_pretty(
     """Format an entry with ergonomic pretty-printing."""
     indent = " " * (entry.depth * indent_width)
 
-    # Format mode (handle null value)
-    if entry.mode == 0:
-        mode_str = "----------"
-    else:
-        mode_str = format_mode(entry.mode)
+    # Mode: null is "-" in pretty form too; the known zero (ZERO_MODE) is
+    # "----------". A null is never written as ten dashes (SPECIFICATION.md
+    # "Null and Zero Values").
+    mode_str = format_mode(entry.mode)
 
     # Format timestamp
     if entry.timestamp == NULL_TIMESTAMP:

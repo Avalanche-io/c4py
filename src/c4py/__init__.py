@@ -33,7 +33,7 @@ from .diff import (
     resolve_chain,
 )
 from .encoder import dump, dumps
-from .entry import Entry
+from .entry import NULL_MODE, ZERO_MODE, Entry, is_null_mode, known_mode
 from .id import (
     C4ID,
     identify,
@@ -68,6 +68,10 @@ __all__ = [
     # Manifest
     "Manifest",
     "Entry",
+    "NULL_MODE",
+    "ZERO_MODE",
+    "is_null_mode",
+    "known_mode",
     # I/O
     "load",
     "loads",

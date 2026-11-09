@@ -94,12 +94,34 @@ class TestNullValues:
         assert e.size == NULL_SIZE
         assert e.c4id is None
 
-    def test_ten_dash_null_mode(self):
-        """'----------' is also valid for null mode."""
+    def test_ten_dash_is_known_zero_not_null(self):
+        """'----------' is the known zero mode, distinct from null '-'."""
+        from c4py.entry import ZERO_MODE
+
         text = "---------- 2025-06-15T12:00:00Z 100 file.txt -\n"
         m = loads(text)
         e = m[0]
+        assert e.mode == ZERO_MODE
+        assert not e.has_null_mode()
+        assert e.canonical().startswith("---------- ")
+
+    def test_ten_dash_on_directory_is_legacy_null(self):
+        """Ten dashes beside a '/' can only be an old encoder's null."""
+        text = "---------- 2025-06-15T12:00:00Z - data/ -\n"
+        e = loads(text)[0]
+        assert e.is_dir()
         assert e.mode == 0
+        assert e.has_null_mode()
+        assert e.canonical() == "- 2025-06-15T12:00:00Z - data/ -"
+
+    def test_d_dashes_is_known_directory_zero(self):
+        """'d---------' is a directory at 0000: known, not null."""
+        import stat
+
+        e = loads("d--------- 2025-06-15T12:00:00Z - data/ -\n")[0]
+        assert e.mode == stat.S_IFDIR
+        assert not e.has_null_mode()
+        assert e.canonical() == "d--------- 2025-06-15T12:00:00Z - data/ -"
 
 
 class TestIndentation:

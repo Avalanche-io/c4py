@@ -182,14 +182,17 @@ def scan(
     # after it), which sort_entries requires to associate children with
     # their parent.
     all_entries: list[Entry] = []
-    _emit_tree(dir_children, str(root), all_entries)
+    unread: list[Entry] = []
+    _emit_tree(dir_children, str(root), all_entries, unread)
 
     # Sort siblings into canonical order
     manifest = Manifest(entries=all_entries)
     manifest.sort_entries()
 
-    # Resolve directories bottom-up: size, timestamp, then C4 ID
-    _resolve_directories(manifest.entries, compute_ids)
+    # Resolve directories bottom-up: size, timestamp, then C4 ID. A
+    # directory os.walk could not list (chmod 000, say) was never read:
+    # its size and C4 ID stay null rather than claiming a known empty.
+    _resolve_directories(manifest.entries, compute_ids, {id(e) for e in unread})
 
     return manifest
 
@@ -198,13 +201,22 @@ def _emit_tree(
     dir_children: dict[str, list[tuple[Entry, str | None]]],
     dir_key: str,
     out: list[Entry],
+    unread: list[Entry],
 ) -> None:
     """Append the entries under dir_key depth-first, each directory
-    immediately followed by its descendants."""
+    immediately followed by its descendants.
+
+    A directory that was listed by its parent but never walked (os.walk
+    skips a directory it cannot read) has no child list; it is appended
+    to *unread* so resolution leaves its size and C4 ID null."""
     for entry, child_key in dir_children.get(dir_key, []):
         out.append(entry)
-        if child_key is not None:
-            _emit_tree(dir_children, child_key, out)
+        if child_key is None:
+            continue
+        if child_key not in dir_children:
+            unread.append(entry)
+            continue
+        _emit_tree(dir_children, child_key, out, unread)
 
 
 def _make_symlink_entry(
@@ -316,9 +328,15 @@ def _identify_file(fpath: Path) -> C4ID | None:
         return None
 
 
-def _resolve_directories(entries: list[Entry], compute_ids: bool) -> None:
+def _resolve_directories(
+    entries: list[Entry], compute_ids: bool, unread: set[int] | None = None
+) -> None:
     """Resolve every directory bottom-up: size and timestamp from its
     children, then its C4 ID.
+
+    *unread* holds id() of directory entries the walk could not list;
+    they keep a null size and null C4 ID (nothing observed their
+    contents), and their parent's size becomes null in turn.
 
     Entries are visited in reverse order so each directory's descendants
     are fully resolved before it. The order within a directory matters:
@@ -331,6 +349,8 @@ def _resolve_directories(entries: list[Entry], compute_ids: bool) -> None:
     for i in range(len(entries) - 1, -1, -1):
         entry = entries[i]
         if not entry.is_dir():
+            continue
+        if unread and id(entry) in unread:
             continue
         children = _get_children(entries, i)
         _propagate_metadata(entry, children)

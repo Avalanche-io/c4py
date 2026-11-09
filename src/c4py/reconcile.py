@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .decoder import load
-from .entry import NULL_TIMESTAMP, Entry
+from .entry import NULL_TIMESTAMP, Entry, is_null_mode, os_mode
 from .id import C4ID, identify_file
 from .manifest import Manifest
 from .store import Store, open_store
@@ -186,8 +186,10 @@ def _execute_plan(
     for rel_path, entry in manifest.flat_entries():
         meta[rel_path] = entry
 
-    # Track directories whose timestamps we need to set (deepest first).
-    dir_timestamps: list[tuple[str, datetime]] = []
+    # Directory modes and timestamps are applied after every child is
+    # written (deepest first): writing children would clobber a parent's
+    # mtime, and a known zero mode ("d---------") would lock us out of a
+    # directory we still have to fill.
 
     for idx, op in enumerate(plan.operations):
         if progress is not None:
@@ -198,11 +200,6 @@ def _execute_plan(
         try:
             if op.type == "mkdir":
                 full.mkdir(parents=True, exist_ok=True)
-                mkdir_entry = meta.get(op.path)
-                if mkdir_entry is not None:
-                    _apply_dir_meta(full, mkdir_entry)
-                    if mkdir_entry.timestamp != NULL_TIMESTAMP:
-                        dir_timestamps.append((op.path, mkdir_entry.timestamp))
                 result.created += 1
 
             elif op.type == "create":
@@ -235,30 +232,18 @@ def _execute_plan(
         except Exception as exc:  # noqa: BLE001
             result.errors.append(f"{op.type} {op.path}: {exc}")
 
-    # Apply directory timestamps deepest-first so that child writes don't
-    # clobber the parent timestamp we already set.
-    for rel_path, ts in sorted(dir_timestamps, key=lambda t: t[0].count("/"), reverse=True):
+    # Directory metadata, deepest first: a child directory's time and mode
+    # are set before its parent is closed, so a parent at "d---------"
+    # never blocks the utime/chmod of what lies under it. Timestamp goes
+    # before mode so the utime is not refused by the mode it is about to
+    # get. Nulls never overwrite: a null timestamp leaves the directory's
+    # time alone, and a null mode leaves whatever mkdir gave it.
+    dirs = [(p, e) for p, e in manifest.flat_entries() if e.is_dir()]
+    for rel_path, entry in sorted(dirs, key=lambda t: t[0].count("/"), reverse=True):
         full = directory / rel_path
-        if full.is_dir():
-            epoch = _truncate_to_seconds(ts)
-            try:
-                os.utime(str(full), (epoch, epoch))
-            except OSError:
-                pass
-
-    # Also set timestamps for pre-existing directories (not created by mkdir ops).
-    for rel_path, entry in manifest.flat_entries():
-        if not entry.is_dir():
+        if not full.is_dir():
             continue
-        if entry.timestamp == NULL_TIMESTAMP:
-            continue
-        full = directory / rel_path
-        if full.is_dir():
-            epoch = _truncate_to_seconds(entry.timestamp)
-            try:
-                os.utime(str(full), (epoch, epoch))
-            except OSError:
-                pass
+        _apply_dir_meta(full, entry)
 
     return result
 
@@ -278,14 +263,15 @@ def _write_from_store(dest: Path, c4id: C4ID, store: Store) -> None:
 
 
 def _apply_file_meta(path: Path, entry: Entry) -> None:
-    """Set permissions and timestamps on a file."""
-    if entry.mode != 0:
-        # Extract permission bits only (mask out file-type bits).
-        perms = stat.S_IMODE(entry.mode)
-        try:
-            os.chmod(str(path), perms)
-        except OSError:
-            pass
+    """Set permissions and timestamps on a file.
+
+    A null mode is never applied (the file keeps the platform default it
+    was created with, or the mode it already had). The known zero mode
+    (ZERO_MODE, "----------") applies as chmod 0000: S_IMODE strips the
+    sentinel bit along with the type bits.
+    """
+    if not is_null_mode(entry.mode):
+        _chmod(path, entry.mode)
 
     if entry.timestamp != NULL_TIMESTAMP:
         epoch = _truncate_to_seconds(entry.timestamp)
@@ -296,13 +282,31 @@ def _apply_file_meta(path: Path, entry: Entry) -> None:
 
 
 def _apply_dir_meta(path: Path, entry: Entry) -> None:
-    """Set permissions on a directory (timestamps are deferred)."""
-    if entry.mode != 0:
-        perms = stat.S_IMODE(entry.mode)
+    """Set a directory's timestamp, then its permissions.
+
+    Called after the directory's children are written. Order matters: a
+    known zero mode ("d---------") set first would refuse the utime.
+    """
+    if entry.timestamp != NULL_TIMESTAMP:
+        epoch = _truncate_to_seconds(entry.timestamp)
         try:
-            os.chmod(str(path), perms)
+            os.utime(str(path), (epoch, epoch))
         except OSError:
             pass
+
+    if not is_null_mode(entry.mode):
+        _chmod(path, entry.mode)
+
+
+def _chmod(path: Path, mode: int) -> None:
+    """chmod *path* to the permission bits of a known c4m mode, if they differ."""
+    perms = stat.S_IMODE(os_mode(mode))
+    try:
+        if stat.S_IMODE(os.lstat(str(path)).st_mode) == perms:
+            return
+        os.chmod(str(path), perms)
+    except OSError:
+        pass
 
 
 def _truncate_to_seconds(ts: datetime) -> float:

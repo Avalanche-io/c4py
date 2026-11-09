@@ -66,7 +66,7 @@ Key interop points:
 5. **entry.py** — Complete `format_mode()` and `canonical()`.
    - Mode string: 10 chars, position 0 = file type, 1-9 = rwx with special bits
    - Use Python's `stat` module constants for bit extraction
-   - Null mode (0) → `-`
+   - Null mode (0) → `-`; the known zero (`ZERO_MODE`, bit 18) → `----------`. Ten dashes on a directory line decodes as a legacy null.
    - Reference: `/Users/joshua/ws/active/c4/oss/c4/c4m/entry.go`
 
 6. **decoder.py** — Implement `loads()` and `load()`.

@@ -33,6 +33,7 @@ from .entry import (
     SEQUENCE_PATTERN,
     Entry,
     FlowDirection,
+    os_mode,
     parse_mode,
 )
 from .id import C4_ID_LENGTH, C4ID, parse
@@ -231,6 +232,13 @@ class _Decoder:
 
         entry.size = size
         entry.name = unsafe_name(name)
+        # Ten dashes on a directory line can only be a legacy null: a
+        # correct encoder writes a zero-permission directory as
+        # "d---------", and pretty encoders through c4 1.0.21 wrote every
+        # null mode as ten dashes. On a file line ten dashes is the known
+        # zero (ZERO_MODE), as parse_mode already decided.
+        if mode_str == "----------" and entry.name.endswith("/"):
+            entry.mode = 0
         entry.target = unsafe_name(target) if target else ""
         entry.c4id = c4id
         entry.hard_link = hard_link
@@ -327,7 +335,7 @@ class _Decoder:
         flow_dir = FlowDirection.NONE
         flow_target = ""
         c4id: C4ID | None = None
-        is_symlink = mode != 0 and stat_mod.S_ISLNK(mode)
+        is_symlink = mode != 0 and stat_mod.S_ISLNK(os_mode(mode))
 
         # 3. Check for link operator: ->, <-, or <>
         if pos + 1 < n and line[pos] == "-" and line[pos + 1] == ">":
@@ -594,19 +602,42 @@ def _parse_timestamp(s: str) -> datetime:
     except ValueError:
         pass
 
-    # Try pretty format "Jan _2 15:04:05 2006 MST"
-    # Python doesn't handle _2 directly, so try multiple patterns
-    for fmt in (
-        "%b %d %H:%M:%S %Y %Z",
-        "%b  %d %H:%M:%S %Y %Z",
-        "%a %b %d %H:%M:%S %Z %Y",
-    ):
+    # Pretty format "Jan _2 15:04:05 2006 MST". strptime's %Z accepts a
+    # zone name but leaves the result naive, so the zone is attached here:
+    # UTC/GMT is UTC, the process's local abbreviation is local time, and
+    # any other name is a zero-offset zone, as Go's time.Parse fabricates.
+    parts = s.split()
+    if len(parts) == 5:
         try:
-            return datetime.strptime(s, fmt).astimezone(timezone.utc)
+            naive = datetime.strptime(" ".join(parts[:4]), "%b %d %H:%M:%S %Y")
         except ValueError:
-            continue
+            naive = None
+        if naive is not None:
+            return _attach_zone(naive, parts[4])
+
+    # Unix date format "Mon Jan _2 15:04:05 MST 2006"
+    if len(parts) == 6:
+        try:
+            naive = datetime.strptime(
+                " ".join(parts[:4] + parts[5:]), "%a %b %d %H:%M:%S %Y"
+            )
+        except ValueError:
+            naive = None
+        if naive is not None:
+            return _attach_zone(naive, parts[4])
 
     raise ValueError(f"cannot parse timestamp {s!r}")
+
+
+def _attach_zone(naive: datetime, zone: str) -> datetime:
+    """Interpret a naive pretty-format time in the named zone, in UTC."""
+    import time
+
+    if zone in ("UTC", "GMT", "Z"):
+        return naive.replace(tzinfo=timezone.utc)
+    if zone in time.tzname:
+        return naive.astimezone(timezone.utc)
+    return naive.replace(tzinfo=timezone.utc)
 
 
 def _apply_patch(base: Manifest, patch: Manifest) -> Manifest:
