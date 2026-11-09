@@ -1,3 +1,4 @@
 # Byte-stable cross-implementation contract fixtures: no EOL conversion.
 tests/vectors/chain-vector/* -text
 tests/vectors/deepen-vector/* -text
+tests/vectors/legacy/* -text

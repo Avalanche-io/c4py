@@ -442,21 +442,33 @@ class _Decoder:
                 pos += 1
                 return "".join(buf), pos, has_unescaped_brackets
 
-            # Check for boundary: space followed by link operator, c4 prefix, or -
+            # Check for boundary: space(s) followed by link operator, c4
+            # prefix, or -. Aligned (pretty) forms pad fields with runs of
+            # spaces, so the lookahead skips the whole run before testing
+            # (mirrors Go's parseNameOrTarget). Through 1.0.24 only one
+            # space was tested, so a pretty line whose C4 ID column is "-"
+            # read its padding into the name, and Workspace.checkout of a
+            # names-only pretty file removed every real file (2026-11-09).
             if ch == " ":
-                rest = line[pos:]
-                if (rest.startswith(" -> ")
-                        or rest.startswith(" <- ")
-                        or rest.startswith(" <> ")):
+                j = pos
+                while j < n and line[j] == " ":
+                    j += 1
+                rest = line[j:]
+                if rest == "":
+                    # Trailing padding: the name ended at the first space.
                     return "".join(buf), pos, has_unescaped_brackets
-                # Hard link group: " ->N" where N is digit 1-9
-                if (len(rest) >= 4
-                        and rest[1] == "-" and rest[2] == ">"
-                        and rest[3].isdigit() and rest[3] != "0"):
+                if (rest.startswith("-> ")
+                        or rest.startswith("<- ")
+                        or rest.startswith("<> ")):
                     return "".join(buf), pos, has_unescaped_brackets
-                if len(rest) > 2 and rest[1] == "c" and rest[2] == "4":
+                # Hard link group: "->N" where N is digit 1-9
+                if (len(rest) >= 3
+                        and rest[0] == "-" and rest[1] == ">"
+                        and rest[2].isdigit() and rest[2] != "0"):
                     return "".join(buf), pos, has_unescaped_brackets
-                if len(rest) >= 2 and rest[1] == "-" and (len(rest) == 2 or rest[2] == " "):
+                if len(rest) >= 2 and rest[0] == "c" and rest[1] == "4":
+                    return "".join(buf), pos, has_unescaped_brackets
+                if rest[0] == "-" and (len(rest) == 1 or rest[1] == " "):
                     return "".join(buf), pos, has_unescaped_brackets
 
             buf.append(ch)
