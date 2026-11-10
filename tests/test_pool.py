@@ -3,10 +3,23 @@
 import os
 from pathlib import Path
 
+import pytest
+
 from c4py.manifest import Manifest
 from c4py.pool import IngestResult, PoolResult, ingest, pool
 from c4py.scanner import scan
 from c4py.store import FSStore
+
+
+@pytest.fixture(autouse=True)
+def _run_in_tmp_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ingest() copies the bundle's .c4m files into the current directory.
+
+    Every test here runs with the current directory inside tmp_path, so
+    those copies never land in the repository (through 1.0.24 the suite
+    rewrote the tracked repo-root manifest.c4m on every run).
+    """
+    monkeypatch.chdir(tmp_path)
 
 
 def _make_project(tmp_path: Path) -> tuple[Manifest, FSStore, Path]:
