@@ -637,7 +637,20 @@ def _attach_zone(naive: datetime, zone: str) -> datetime:
         return naive.replace(tzinfo=timezone.utc)
     if zone in time.tzname:
         return naive.astimezone(timezone.utc)
-    return naive.replace(tzinfo=timezone.utc)
+    numeric = re.fullmatch(r"([+-])(\d{2})(\d{2})", zone)
+    if numeric:
+        sign = 1 if numeric.group(1) == "+" else -1
+        offset = sign * (int(numeric.group(2)) * 60 + int(numeric.group(3)))
+        from datetime import timedelta
+
+        return naive.replace(tzinfo=timezone(timedelta(minutes=offset))).astimezone(timezone.utc)
+    # Any other abbreviation names an offset this process cannot know.
+    # Inventing zero (as Go's time.Parse does) reads the time hours wrong
+    # while claiming success; refuse instead, as the Go decoder now does
+    # (c4 #80) and as libc4 does. Write UTC or a numeric offset.
+    raise ValueError(
+        f"unknown time zone abbreviation {zone!r}: write UTC or a numeric offset"
+    )
 
 
 def _apply_patch(base: Manifest, patch: Manifest) -> Manifest:
