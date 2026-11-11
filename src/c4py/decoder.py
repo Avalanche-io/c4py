@@ -582,19 +582,55 @@ def _parse_timestamp(s: str) -> datetime:
     except ValueError:
         pass
 
-    # Try pretty format "Jan _2 15:04:05 2006 MST"
-    # Python doesn't handle _2 directly, so try multiple patterns
-    for fmt in (
-        "%b %d %H:%M:%S %Y %Z",
-        "%b  %d %H:%M:%S %Y %Z",
-        "%a %b %d %H:%M:%S %Z %Y",
-    ):
+    # Pretty format "Jan _2 15:04:05 2006 MST". strptime's %Z accepts a
+    # zone name but leaves the result naive, and astimezone() then reads a
+    # naive time as local: through 1.0.24 a time marked UTC was read as the
+    # reader's local time, hours wrong with no error, and a numeric offset
+    # (which c4ts writes) was refused. The zone is attached here instead.
+    parts = s.split()
+    if len(parts) == 5:
         try:
-            return datetime.strptime(s, fmt).astimezone(timezone.utc)
+            naive = datetime.strptime(" ".join(parts[:4]), "%b %d %H:%M:%S %Y")
         except ValueError:
-            continue
+            naive = None
+        if naive is not None:
+            return _attach_zone(naive, parts[4])
+
+    # Unix date format "Mon Jan _2 15:04:05 MST 2006"
+    if len(parts) == 6:
+        try:
+            naive = datetime.strptime(
+                " ".join(parts[:4] + parts[5:]), "%a %b %d %H:%M:%S %Y"
+            )
+        except ValueError:
+            naive = None
+        if naive is not None:
+            return _attach_zone(naive, parts[4])
 
     raise ValueError(f"cannot parse timestamp {s!r}")
+
+
+def _attach_zone(naive: datetime, zone: str) -> datetime:
+    """Interpret a naive pretty-format time in the named zone, in UTC."""
+    import time
+    from datetime import timedelta
+
+    if zone in ("UTC", "GMT", "Z"):
+        return naive.replace(tzinfo=timezone.utc)
+    if zone in time.tzname:
+        return naive.astimezone(timezone.utc)
+    numeric = re.fullmatch(r"([+-])(\d{2})(\d{2})", zone)
+    if numeric:
+        sign = 1 if numeric.group(1) == "+" else -1
+        offset = sign * (int(numeric.group(2)) * 60 + int(numeric.group(3)))
+        return naive.replace(tzinfo=timezone(timedelta(minutes=offset))).astimezone(timezone.utc)
+    # Any other abbreviation names an offset this process cannot know.
+    # Inventing one reads the time hours wrong while claiming success;
+    # refuse instead, as the Go decoder and libc4 do. Write UTC or a
+    # numeric offset.
+    raise ValueError(
+        f"unknown time zone abbreviation {zone!r}: write UTC or a numeric offset"
+    )
 
 
 def _apply_patch(base: Manifest, patch: Manifest) -> Manifest:
