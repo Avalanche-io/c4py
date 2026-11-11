@@ -118,11 +118,13 @@ class TestPathTraversal:
         assert not result.is_valid
         assert any("path separator" in e.message for e in result.errors)
 
-    def test_backslash_in_name(self):
+    def test_backslash_in_name_is_a_literal(self):
+        # Only "/" separates paths in c4m; a backslash is a literal name
+        # character, written "\\" (backslash-name vector). It was refused
+        # here as "not allowed in c4m names" through 1.0.26.
         m = Manifest(entries=[_make_entry("file\\name.txt")])
         result = validate(m)
-        assert not result.is_valid
-        assert any("backslash" in e.message for e in result.errors)
+        assert result.is_valid, [e.message for e in result.errors]
 
     def test_empty_name(self):
         m = Manifest(entries=[Entry(name="", depth=0)])
