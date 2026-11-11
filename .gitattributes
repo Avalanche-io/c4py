@@ -3,3 +3,6 @@ tests/vectors/chain-vector/* -text
 tests/vectors/deepen-vector/* -text
 tests/vectors/zero-null-vector/* -text
 tests/vectors/legacy/* -text
+tests/vectors/link-target-vector/* -text
+tests/vectors/backslash-name-vector/* -text
+tests/vectors/damaged-line-vector/* -text
