@@ -58,6 +58,20 @@ def is_null_mode(mode: int) -> bool:
     return mode == NULL_MODE
 
 
+def is_path_name(name: str) -> bool:
+    """True if *name* is a path, not a bare entry name.
+
+    Only "/" separates paths in c4m, and a name may end in "/" only as a
+    directory's marker: a name holding any other "/", and the names ".",
+    "..", "./", "../", "/" and "" are path components (SPECIFICATION.md
+    "Invalid names"; the shared name-rule vector). Go: c4m.isPathName.
+    """
+    if name == "":
+        return True
+    base = name[:-1] if name.endswith("/") else name
+    return base in ("", ".", "..") or "/" in base or "\x00" in base
+
+
 def os_mode(mode: int) -> int:
     """The operating-system bits of a c4m mode: type and permissions.
 

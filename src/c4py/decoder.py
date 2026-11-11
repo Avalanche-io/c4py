@@ -33,6 +33,7 @@ from .entry import (
     SEQUENCE_PATTERN,
     Entry,
     FlowDirection,
+    is_path_name,
     os_mode,
     parse_mode,
 )
@@ -238,6 +239,13 @@ class _Decoder:
 
         entry.size = size
         entry.name = unsafe_name(name)
+        # A name is a bare entry name, checked once decoded, so an escaped
+        # "/" is refused as surely as a raw one (name-rule vector).
+        if is_path_name(entry.name):
+            raise ValueError(
+                f"line {self.line_num}: name {entry.name!r} is a path, not an entry "
+                "name (only a directory's trailing / is allowed)"
+            )
         # Ten dashes on a directory line can only be a legacy null: a
         # correct encoder writes a zero-permission directory as
         # "d---------", and pretty encoders through c4 1.0.21 wrote every
@@ -470,10 +478,21 @@ class _Decoder:
             if ch in ("[", "]"):
                 has_unescaped_brackets = True
 
-            # Directory name ends at / (inclusive)
+            # A "/" ends a directory's name, and only there: the field must
+            # end with it. Anything after it but a space was part of the
+            # name, so the name holds a "/" and is refused. Before, the
+            # name was cut at its first "/" and the rest of the line, C4 ID
+            # included, dropped (name-rule vector).
             if ch == "/":
                 buf.append("/")
                 pos += 1
+                if pos < n and line[pos] != " ":
+                    end = line.find(" ", pos)
+                    held = "".join(buf) + line[pos:end if end >= 0 else n]
+                    raise ValueError(
+                        f"line {self.line_num}: name {held!r} holds '/' "
+                        "(only a directory's trailing / is allowed)"
+                    )
                 return "".join(buf), pos, has_unescaped_brackets
 
             # Check for boundary: space(s) followed by link operator, c4
