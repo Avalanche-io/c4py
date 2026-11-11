@@ -236,8 +236,13 @@ def _make_symlink_entry(
     target = ""
     try:
         target = os.readlink(fpath)
-        # Normalize to forward slashes for c4m portability
-        target = target.replace("\\", "/")
+        # Only "/" separates paths in c4m. Convert the platform's own
+        # separator (Windows "\") to it, as Go's filepath.ToSlash does;
+        # elsewhere a backslash is a literal character of the target and is
+        # kept. Replacing every "\" recorded a target ending in "\" as one
+        # ending in "/", a different target (2026-11-11).
+        if os.sep != "/":
+            target = target.replace(os.sep, "/")
     except OSError:
         pass
 
