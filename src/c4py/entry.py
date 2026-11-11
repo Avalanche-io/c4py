@@ -276,8 +276,19 @@ def parse_mode(s: str) -> int:
     else:
         raise ValueError(f"unknown file type: {type_char}")
 
-    # Permission bits
+    # Permission bits. Each position holds its own letter or '-'; the
+    # execute positions may also carry s/S (owner, group) or t/T (other),
+    # exactly what every encoder writes. Any other character is refused:
+    # it used to read as a clear bit (shared damaged-line vector).
     perm_chars = s[1:]
+    for i, c in enumerate(perm_chars):
+        allowed = {0: "r", 1: "w", 2: "x"}[i % 3] + "-"
+        if i in (2, 5):
+            allowed += "sS"
+        elif i == 8:
+            allowed += "tT"
+        if c not in allowed:
+            raise ValueError(f"invalid permission character {c!r} at position {i + 2}")
 
     # User
     if perm_chars[0] == "r":

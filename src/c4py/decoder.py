@@ -202,13 +202,19 @@ class _Decoder:
                 f"line {self.line_num}: line too short"
             )
 
-        mode = parse_mode(mode_str)
+        try:
+            mode = parse_mode(mode_str)
+        except ValueError as exc:
+            raise ValueError(f"line {self.line_num}: invalid mode {mode_str!r}: {exc}") from exc
 
         entry = Entry(name="", mode=mode, depth=depth)
 
         # Parse timestamp
         ts_str, line = self._parse_timestamp_field(line)
-        entry.timestamp = _parse_timestamp(ts_str)
+        try:
+            entry.timestamp = _parse_timestamp(ts_str)
+        except ValueError as exc:
+            raise ValueError(f"line {self.line_num}: {exc}") from exc
 
         # Parse remaining fields: size, name, [link-op target], [c4id]
         size, name, raw_name, target, c4id, hard_link, flow_dir, flow_target = (
@@ -282,6 +288,7 @@ class _Decoder:
             raise ValueError(f"line {self.line_num}: insufficient fields after timestamp")
 
         # 1. Parse size token
+        tok_start = pos
         size: int
         if line[pos] == "-":
             size = NULL_SIZE
@@ -294,6 +301,14 @@ class _Decoder:
                 raise ValueError(f"line {self.line_num}: invalid size at position {pos}")
             size_str = line[size_start:pos].replace(",", "")
             size = int(size_str)
+        # The size token ends at a space: "6x a.txt" read as size 6 and the
+        # name "x a.txt", a different entry with no error (Go reference,
+        # shared damaged-line vector).
+        if pos < n and line[pos] != " ":
+            end = pos
+            while end < n and line[end] != " ":
+                end += 1
+            raise ValueError(f"line {self.line_num}: invalid size {line[tok_start:end]!r}")
 
         # Skip whitespace
         while pos < n and line[pos] == " ":
@@ -350,8 +365,11 @@ class _Decoder:
                         pos += 1
                 elif pos < n:
                     remaining = line[pos:].strip()
-                    if remaining == "-" or remaining.startswith("c4"):
-                        # Hard link (ungrouped)
+                    if _is_lone_id_field(remaining):
+                        # Hard link (ungrouped): the C4 ID field (or its null)
+                        # is the only field after the operator. A second
+                        # field means the first is a target, even when it
+                        # starts with "c4" (link-target vector).
                         hard_link = -1
                     else:
                         # Fallback: symlink target
@@ -413,13 +431,21 @@ class _Decoder:
         while pos < n:
             ch = line[pos]
 
-            # c4m field-boundary escapes
+            # A backslash always starts a two-byte escape: a c4m
+            # field-boundary escape becomes its literal, any other (a
+            # SafeName escape such as \\\\) passes through whole, so its
+            # second byte never starts an escape of its own. A name ending
+            # in a backslash read back with a space added before this
+            # (backslash-name vector).
             if ch == "\\" and pos + 1 < n:
                 nxt = line[pos + 1]
                 if nxt in (" ", '"', "[", "]"):
                     buf.append(nxt)
-                    pos += 2
-                    continue
+                else:
+                    buf.append(ch)
+                    buf.append(nxt)
+                pos += 2
+                continue
 
             if ch in ("[", "]"):
                 has_unescaped_brackets = True
@@ -477,20 +503,22 @@ class _Decoder:
         while pos < n:
             ch = line[pos]
 
-            # Backslash escapes
+            # A backslash always starts a two-byte escape (as in names).
             if ch == "\\" and pos + 1 < n:
                 nxt = line[pos + 1]
                 if nxt in (" ", '"'):
                     buf.append(nxt)
-                    pos += 2
-                    continue
+                else:
+                    buf.append(ch)
+                    buf.append(nxt)
+                pos += 2
+                continue
 
-            if ch == " ":
-                rest = line[pos:]
-                if len(rest) > 2 and rest[1] == "c" and rest[2] == "4":
-                    return "".join(buf), pos, None
-                if len(rest) >= 2 and rest[1] == "-" and (len(rest) == 2 or rest[2] == " "):
-                    return "".join(buf), pos, None
+            # The pretty form pads before the C4 ID field; the whole run
+            # of spaces is skipped before asking whether that field starts
+            # (link-target vector).
+            if ch == " " and _starts_id_field(line, pos):
+                return "".join(buf), pos, None
 
             buf.append(ch)
             pos += 1
@@ -504,15 +532,39 @@ class _Decoder:
             raise ValueError(f"line {self.line_num}: expected flow target")
         start = pos
         while pos < n:
-            ch = line[pos]
-            if ch == " ":
-                rest = line[pos:]
-                if len(rest) > 2 and rest[1] == "c" and rest[2] == "4":
-                    return line[start:pos], pos
-                if len(rest) >= 2 and rest[1] == "-" and (len(rest) == 2 or rest[2] == " "):
-                    return line[start:pos], pos
+            if line[pos] == " " and _starts_id_field(line, pos):
+                return line[start:pos], pos
             pos += 1
         return line[start:pos], pos
+
+
+def _starts_id_field(line: str, pos: int) -> bool:
+    """Whether the run of spaces at pos is followed by the C4 ID field: a
+    C4 ID, or the null "-" as the last field."""
+    n = len(line)
+    while pos < n and line[pos] == " ":
+        pos += 1
+    rest = line[pos:]
+    return rest.startswith("c4") or rest == "-" or rest.startswith("- ")
+
+
+def _is_lone_id_field(s: str) -> bool:
+    """Whether s, the rest of a line after a link operator, is exactly one
+    field that is a C4 ID or the null "-". A field ends at an unescaped
+    space."""
+    if s == "-":
+        return True
+    if not s.startswith("c4"):
+        return False
+    i = 0
+    while i < len(s):
+        if s[i] == "\\":
+            i += 2
+            continue
+        if s[i] == " ":
+            return False
+        i += 1
+    return _is_bare_c4id(s)
 
 
 def _is_bare_c4id(s: str) -> bool:
