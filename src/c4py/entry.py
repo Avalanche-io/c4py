@@ -415,7 +415,13 @@ def _format_sequence_name(name: str) -> str:
     """Format a sequence name, escaping prefix/suffix but leaving range notation."""
     match = SEQUENCE_PATTERN.search(name)
     if match is None:
-        return name
+        # No range notation: not a sequence after all, so it is written as
+        # an ordinary name, SafeName then field escaping, brackets included.
+        # Through 1.0.26 this returned the raw name, the one path that could
+        # write an unescaped space, quote or control byte.
+        from .safename import safe_name
+
+        return _escape_c4m_name(safe_name(name), is_sequence=False)
     prefix = name[:match.start()]
     range_part = name[match.start():match.end()]
     suffix = name[match.end():]
