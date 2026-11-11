@@ -65,13 +65,54 @@ def scan(
     2. For each file: stat for metadata, compute C4 ID (streaming)
     3. If store is provided: read once, identify + store (single pass for
        files <= 100 MB; temp file for larger files)
-    4. For symlinks: record target, optionally identify target content
+    4. For symlinks: an "l" entry with its target and, as Go records it, the
+       C4 ID of a file or scanned directory it names (none for a dangling
+       link, a link to a link, or a directory already being resolved)
     5. Sort entries into canonical order
     6. Compute directory C4 IDs bottom-up
     """
+    return _scan(
+        path,
+        store=store,
+        follow_symlinks=follow_symlinks,
+        compute_ids=compute_ids,
+        progress=progress,
+        link_chain=frozenset(),
+    )
+
+
+def _clean_abs(path: str | Path) -> str:
+    """Absolute, lexically cleaned path, as Go's filepath.Abs then
+    filepath.Clean give it: ".." is removed by name, never by following
+    a link, so the result names the path as the scan walked it."""
+    p = os.path.normpath(os.path.abspath(path))
+    if os.sep == "/" and p.startswith("//"):
+        p = "/" + p.lstrip("/")
+    return p
+
+
+def _scan(
+    path: str | Path,
+    *,
+    store: Store | None,
+    follow_symlinks: bool,
+    compute_ids: bool,
+    progress: Callable[[str, int, int], None] | None,
+    link_chain: frozenset[str],
+) -> Manifest:
+    """scan(), carrying the directories already being resolved through a
+    symbolic link above this one (Go's linkChain). The scan root joins
+    the chain, so a link naming it, or any directory in the chain, gets
+    no C4 ID instead of recursing."""
     root = Path(path).resolve()
     if not root.is_dir():
         raise ValueError(f"not a directory: {root}")
+
+    # The walk runs on the resolved root, but link targets are resolved by
+    # name from the path as given, as Go's scanner resolves them. On macOS
+    # /tmp is itself a link to /private/tmp, so the two differ.
+    lexical_root = _clean_abs(path)
+    chain = link_chain | {lexical_root}
 
     # Direct children of each directory, keyed by directory path. Each child
     # is (entry, key of its own child list or None for non-directories).
@@ -102,6 +143,7 @@ def scan(
             continue
         parts = rel.parts
         depth = len(parts)
+        lexical_dir = os.path.join(lexical_root, *parts)
 
         children_for_dir: list[tuple[Entry, str | None]] = []
         dir_key = str(dirpath)
@@ -124,7 +166,10 @@ def scan(
 
             # Handle symlinks
             if stat.S_ISLNK(file_mode) and not follow_symlinks:
-                entry = _make_symlink_entry(fpath, fstat, fname, depth, compute_ids)
+                entry = _make_symlink_entry(
+                    fpath, fstat, fname, depth, compute_ids,
+                    os.path.join(lexical_dir, fname), chain,
+                )
                 children_for_dir.append((entry, None))
                 files_processed += 1
                 if progress is not None:
@@ -161,10 +206,19 @@ def scan(
 
             dir_mode = dstat.st_mode
 
-            # Handle symlink directories
+            # A link to a directory is listed with the directories, but it
+            # is a link: an "l" entry under its own name, never a
+            # directory-style "name/" (that recorded it as an empty
+            # directory, a different tree from Go's).
             if stat.S_ISLNK(dir_mode) and not follow_symlinks:
-                entry = _make_symlink_entry(dpath, dstat, dname + "/", depth, compute_ids)
+                entry = _make_symlink_entry(
+                    dpath, dstat, dname, depth, compute_ids,
+                    os.path.join(lexical_dir, dname), chain,
+                )
                 children_for_dir.append((entry, None))
+                files_processed += 1
+                if progress is not None:
+                    progress(str(dpath), files_processed, 0)
                 continue
 
             # A directory's timestamp is its own mtime, observed on disk, as
@@ -231,11 +285,18 @@ def _make_symlink_entry(
     name: str,
     depth: int,
     compute_ids: bool,
+    link_path: str,
+    chain: frozenset[str],
 ) -> Entry:
-    """Create an Entry for a symlink."""
+    """Create an Entry for a symlink: an "l" entry with the link's own
+    mode, mtime and size (the target's length), its target, and the C4 ID
+    _symlink_target_c4id gives. *link_path* is the link's lexical path
+    (see _scan) and *chain* the directories being resolved."""
+    raw_target = ""
     target = ""
     try:
-        target = os.readlink(fpath)
+        raw_target = os.readlink(fpath)
+        target = raw_target
         # Only "/" separates paths in c4m. Convert the platform's own
         # separator (Windows "\") to it, as Go's filepath.ToSlash does;
         # elsewhere a backslash is a literal character of the target and is
@@ -255,17 +316,64 @@ def _make_symlink_entry(
         target=target,
     )
 
-    # Compute C4 ID of symlink target if enabled
-    if compute_ids and target:
-        target_path = fpath.parent / target if not os.path.isabs(target) else Path(target)
-        try:
-            target_info = target_path.stat()
-            if stat.S_ISREG(target_info.st_mode):
-                entry.c4id = _identify_file(target_path)
-        except OSError:
-            pass  # broken symlink or inaccessible
+    if compute_ids and raw_target:
+        entry.c4id = _symlink_target_c4id(link_path, raw_target, chain)
 
     return entry
+
+
+def _symlink_target_c4id(
+    link_path: str, target: str, chain: frozenset[str]
+) -> C4ID | None:
+    """The C4 ID a link records, by Go's computeSymlinkTargetC4ID:
+
+    - a regular file: the file's C4 ID;
+    - a directory: the C4 ID of that directory scanned, unless it is in
+      *chain* (the scan root, or a directory being resolved through a link
+      above this one, as `up -> ..` and `here -> .` name), which gets none
+      and is not scanned: that scan would meet this link again;
+    - a dangling link, a link naming another link, or anything else: none.
+
+    A relative target is joined to the link's directory and cleaned by
+    name, as Go's filepath.Join does, and the result is examined without
+    following a final link (lstat), so a link to a link stays null rather
+    than taking the final file's C4 ID.
+    """
+    if os.path.isabs(target):
+        target_path = target
+    else:
+        target_path = os.path.normpath(os.path.join(os.path.dirname(link_path), target))
+
+    try:
+        info = os.lstat(target_path)
+    except OSError:
+        return None
+
+    mode = info.st_mode
+    if stat.S_ISLNK(mode):
+        return None
+
+    if stat.S_ISDIR(mode):
+        key = _clean_abs(target_path)
+        if key in chain:
+            return None
+        try:
+            sub = _scan(
+                target_path,
+                store=None,
+                follow_symlinks=False,
+                compute_ids=True,
+                progress=None,
+                link_chain=chain | {key},
+            )
+        except (OSError, ValueError):
+            return None
+        return sub.compute_c4id()
+
+    if stat.S_ISREG(mode):
+        return _identify_file(Path(target_path))
+
+    return None
 
 
 def _identify_and_store(
