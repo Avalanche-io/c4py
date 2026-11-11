@@ -4,7 +4,7 @@ Validation rules (from SPECIFICATION.md):
 - Reject lines beginning with @
 - Reject invalid UTF-8
 - Reject CR characters
-- Reject path traversal (../, ./, /, \\)
+- Reject path traversal (../, ./, names holding /); a backslash is a literal
 - Reject duplicate paths in same scope
 - Verify indentation consistency
 - Verify entry field formats
@@ -173,13 +173,6 @@ def _validate_name(entry: Entry, line: int, result: ValidationResult) -> None:
         result.issues.append(Issue(
             severity=Severity.ERROR,
             message=f"name contains path separator '/': '{name}' — use depth for hierarchy",
-            line=line,
-        ))
-
-    if "\\" in base:
-        result.issues.append(Issue(
-            severity=Severity.ERROR,
-            message=f"name contains backslash: '{name}' — backslash is not allowed in c4m names",
             line=line,
         ))
 
