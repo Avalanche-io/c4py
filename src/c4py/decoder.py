@@ -478,6 +478,17 @@ class _Decoder:
             if ch in ("[", "]"):
                 has_unescaped_brackets = True
 
+            # A double quote is written \" in a name, and a control byte is
+            # encoded by SafeName, so a raw one never comes from a
+            # conforming writer: it is damage, refused rather than read
+            # into the name (name-escape vector).
+            if ch == '"':
+                raise ValueError(f"line {self.line_num}: name holds a raw '\"' (written \\\" in a name)")
+            if ord(ch) < 0x20:
+                raise ValueError(
+                    f"line {self.line_num}: name holds a raw control byte 0x{ord(ch):02X} (SafeName encodes it)"
+                )
+
             # A "/" ends a directory's name, and only there: the field must
             # end with it. Anything after it but a space was part of the
             # name, so the name holds a "/" and is refused. Before, the
@@ -523,6 +534,16 @@ class _Decoder:
                     return "".join(buf), pos, has_unescaped_brackets
                 if rest[0] == "-" and (len(rest) == 1 or rest[1] == " "):
                     return "".join(buf), pos, has_unescaped_brackets
+                # A space that is not a field boundary would be part of
+                # the name, but a name's space is written "\\ ": an
+                # unescaped one is damage, often a damaged C4 ID field that
+                # would otherwise join the name (name-escape vector).
+                end = rest.find(" ")
+                held = "".join(buf) + " " + (rest if end < 0 else rest[:end])
+                raise ValueError(
+                    f"line {self.line_num}: name {held!r} holds an unescaped space "
+                    "(written '\\ ' in a name), or its C4 ID field is damaged"
+                )
 
             buf.append(ch)
             pos += 1
