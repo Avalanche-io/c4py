@@ -167,10 +167,16 @@ def scan(
                 children_for_dir.append((entry, None))
                 continue
 
+            # A directory's timestamp is its own mtime, observed on disk, as
+            # the Go scanner records it (design/directory-timestamp.md in the
+            # Go reference repo). It used to start null and take the newest
+            # child's time, so every scanned tree with a directory had a
+            # C4 ID no other implementation computes, and an empty
+            # directory read as the epoch.
             entry = Entry(
                 name=dname + "/",
                 mode=normalize_mode(dir_mode),
-                timestamp=NULL_TIMESTAMP,  # will be computed bottom-up
+                timestamp=datetime.fromtimestamp(dstat.st_mtime, tz=timezone.utc),
                 size=-1,  # will be computed bottom-up
                 depth=depth,
             )
