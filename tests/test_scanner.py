@@ -234,6 +234,18 @@ class TestScanSymlinks:
         if link_entry is not None:
             assert link_entry.target != ""
 
+    @pytest.mark.skipif(os.sep != "/", reason="a backslash is the separator on this platform")
+    def test_symlink_target_keeps_its_backslashes(self, tmp_path: Path):
+        # Only "/" separates paths in c4m; on a "/" platform a backslash is a
+        # literal character of a link target. Every "\" used to become "/",
+        # so "target\" was recorded as "target/" (2026-11-11).
+        root = tmp_path / "bslinks"
+        root.mkdir()
+        for name, target in [("trail", "target\\"), ("mid", "a\\b"), ("both", "dir/x\\y")]:
+            os.symlink(target, root / name)
+        got = {e.name: e.target for e in scan(root, follow_symlinks=False).entries}
+        assert got == {"trail": "target\\", "mid": "a\\b", "both": "dir/x\\y"}
+
     def test_scan_follow_symlinks(self, tmp_path: Path):
         root = tmp_path / "follow"
         root.mkdir()
