@@ -201,6 +201,7 @@ class TestScanRecordsKnownZero:
         locked = root / "locked"
         locked.mkdir()
         (locked / "inside.txt").write_bytes(b"inside")
+        os.utime(locked, (1640995200, 1640995200))  # 2022-01-01T00:00:00Z
         (root / "zero.txt").chmod(0)
         locked.chmod(0)
         try:
@@ -226,10 +227,12 @@ class TestScanRecordsKnownZero:
         assert locked.mode == stat.S_IFDIR, "d--------- is known"
         assert locked.size == NULL_SIZE
         assert locked.c4id is None
-        assert locked.canonical() == "d--------- - - locked/ -"
+        # Its own mtime is observed (lstat needs no permission on it), as the
+        # Go scanner records it; only what needs a listing stays null.
+        assert locked.canonical() == "d--------- 2022-01-01T00:00:00Z - locked/ -"
         # The unread directory makes the tree's size null, not wrong.
         text = dumps(m)
-        assert "d--------- - - locked/ -" in text
+        assert "d--------- 2022-01-01T00:00:00Z - locked/ -" in text
 
 
 class TestReconcileAppliesModes:

@@ -1,6 +1,8 @@
 """Tests for the directory scanner."""
 
+import os
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -391,3 +393,44 @@ class TestNestedDirectories:
         buf = io.StringIO()
         c4py.dump(c4py.scan(root), buf)
         assert buf.getvalue() == go
+
+
+class TestDirectoryTimestamp:
+    """A directory's timestamp is its own mtime, observed on disk, never its
+    newest child's (the Go scanner's rule; design/directory-timestamp.md in
+    the Go reference repo). The root C4 ID pinned here is the Go CLI's for the
+    same tree (c4 id -q on master, measured 2026-11-11)."""
+
+    @staticmethod
+    def _tree(tmp_path: Path) -> Path:
+        root = tmp_path / "dirtime"
+        d = root / "d"
+        e = root / "empty"
+        d.mkdir(parents=True)
+        e.mkdir()
+        (d / "f").write_bytes(b"x\n")
+        os.utime(d / "f", (1577836800, 1577836800))  # 2020-01-01T00:00:00Z
+        os.utime(d, (1672531200, 1672531200))  # 2023-01-01T00:00:00Z
+        os.utime(e, (1704067200, 1704067200))  # 2024-01-01T00:00:00Z
+        return root
+
+    def test_directory_keeps_its_own_mtime(self, tmp_path: Path):
+        m = scan(self._tree(tmp_path))
+        got = {e.name: e.timestamp for e in m.entries}
+        assert got["d/"] == datetime(2023, 1, 1, tzinfo=timezone.utc)
+        assert got["f"] == datetime(2020, 1, 1, tzinfo=timezone.utc)
+
+    def test_empty_directory_keeps_its_own_mtime(self, tmp_path: Path):
+        m = scan(self._tree(tmp_path))
+        empty = next(e for e in m.entries if e.name == "empty/")
+        assert empty.timestamp == datetime(2024, 1, 1, tzinfo=timezone.utc)
+        assert empty.size == 0
+        assert str(empty.c4id) == str(identify_bytes(b""))
+
+    def test_root_id_matches_go(self, tmp_path: Path):
+        root = self._tree(tmp_path)
+        os.chmod(root / "d" / "f", 0o644)
+        os.chmod(root / "d", 0o755)
+        os.chmod(root / "empty", 0o755)
+        go = "c42XFjXvTc7ZFz89zArFCpbkrPrQK752ykhNbqJBvJSoCm8v1Qm21vTAJjgFaou25QHEDAvm1qmPVuCvR8Ss7kH5py"
+        assert str(scan(root).compute_c4id()) == go
