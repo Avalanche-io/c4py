@@ -90,6 +90,22 @@ class TestScan:
             if not entry.is_dir():
                 assert entry.c4id is None, f"{entry.name} should not have C4 ID"
 
+    def test_scan_no_ids_observed_empty_directory_is_empty(self, tmp_path: Path):
+        # As the Go reference's `c4 id -m m` (Avalanche-io/c4#130): a
+        # directory listed with no children is empty by observation, size 0
+        # with the empty listing's ID, even when nothing else has an ID.
+        (tmp_path / "a" / "b" / "empty").mkdir(parents=True)
+        (tmp_path / "a" / "z").write_text("z\n")
+        m = scan(tmp_path, compute_ids=False)
+        by_name = {e.name: e for e in m.entries}
+        empty = by_name["empty/"]
+        assert empty.size == 0
+        assert empty.c4id == identify_bytes(b"")
+        for e in m.entries:
+            assert e.size >= 0, e.name
+            if e.name != "empty/":
+                assert e.c4id is None, e.name
+
     def test_scan_file_metadata(self, tmp_path: Path):
         root = tmp_path / "meta"
         root.mkdir()

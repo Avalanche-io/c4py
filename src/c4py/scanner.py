@@ -362,6 +362,13 @@ def _resolve_directories(
         _propagate_metadata(entry, children)
         if compute_ids:
             _compute_dir_id(entries, i, children)
+        elif not children:
+            # Without IDs a directory the walk listed with no children is
+            # still empty by observation. It carries the empty listing's
+            # ID, a known constant rather than a hash of anything read, as
+            # the Go reference's metadata mode does (Avalanche-io/c4#130).
+            # An unread directory was skipped above and keeps null.
+            entry.c4id = identify_bytes(b"")
 
 
 def _propagate_metadata(entry: Entry, children: list[Entry]) -> None:
