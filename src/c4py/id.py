@@ -147,31 +147,16 @@ def identify_bytes(data: bytes) -> C4ID:
 
 
 def identify_file(path: str | os.PathLike[str], *, buf_size: int = 65536) -> C4ID:
-    """Compute the C4 ID of a file on disk.
+    """Compute the C4 ID of a file on disk: the ID of its bytes, exactly.
 
-    If the file is a valid c4m file (detected by .c4m extension or content
-    heuristic), the content is canonicalized before hashing. The C4 ID is
-    always computed from the canonical form, not the raw bytes on disk.
-
-    This is the one exception to the general rule that C4 identifies raw bytes.
-    Two c4m files describing the same filesystem produce the same C4 ID
-    regardless of formatting.
+    A file holding c4m text is no exception. Its C4 ID must summon that
+    exact file, so it is never re-rendered before hashing (the Go
+    reference's design/no-self-id.md). The ID of the description a c4m
+    file holds is a separate question, answered by decoding it and
+    calling Manifest.compute_c4id().
     """
-    from .canonical import try_canonicalize
-
-    p = Path(path)
-    is_c4m_ext = p.suffix.lower() == ".c4m"
-
     with open(path, "rb") as f:
-        data = f.read()
-
-    # Try canonicalization: always for .c4m files, heuristic for others
-    if is_c4m_ext or len(data) < 10 * 1024 * 1024:  # heuristic up to 10 MB
-        canonical = try_canonicalize(data)
-        if canonical is not None:
-            return identify_bytes(canonical)
-
-    return identify_bytes(data)
+        return identify(f, buf_size=buf_size)
 
 
 def identify_files(

@@ -107,18 +107,10 @@ class FSStore(Store):
     def put(self, source: BinaryIO) -> C4ID:
         """Store content and return its C4 ID. Atomic: fsync + rename.
 
-        If the content parses as a valid c4m file, the canonical form is
-        stored and hashed instead of the raw bytes. This ensures that
-        c4m content identity is always based on canonical form.
+        The bytes given are stored exactly, and the C4 ID is theirs, so
+        get(c4id) returns exactly what was put. c4m text is no exception.
         """
-        from .canonical import try_canonicalize
-
         data = source.read()
-
-        # Canonicalize c4m content before storing
-        canonical = try_canonicalize(data)
-        if canonical is not None:
-            data = canonical
 
         self.root.mkdir(parents=True, exist_ok=True)
 

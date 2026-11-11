@@ -14,6 +14,7 @@ from c4py.encoder import dumps
 from c4py.entry import Entry
 from c4py.id import identify_bytes, identify_file
 from c4py.manifest import Manifest
+from c4py.scanner import scan
 from c4py.store import FSStore
 
 
@@ -122,103 +123,75 @@ class TestTryCanonicalize:
         assert try_canonicalize(b"") is None
 
 
-class TestIdentifyFileCanonical:
-    """identify_file() canonicalizes c4m content before hashing."""
+class TestFileIDIsItsBytes:
+    """A file's C4 ID is the ID of its bytes, c4m text included: the ID must
+    summon that exact file (the Go reference's design/no-self-id.md). Until
+    2026-11-11 identify_file, the scanner and FSStore.put re-rendered any
+    content that parsed as c4m, whatever the file's name, so a pretty c4m
+    file's ID could not summon it."""
 
-    def test_c4m_extension_canonicalizes(self, tmp_path):
-        """File with .c4m extension is canonicalized."""
-        canonical = tmp_path / "test.c4m"
-        canonical.write_text(_canonical_text())
-        pretty = tmp_path / "pretty.c4m"
-        pretty.write_text(_pretty_text())
+    def test_c4m_file_id_is_its_bytes(self, tmp_path):
+        for name, text in [("canonical.c4m", _canonical_text()), ("pretty.c4m", _pretty_text())]:
+            f = tmp_path / name
+            f.write_text(text)
+            assert identify_file(f) == identify_bytes(text.encode("utf-8")), name
 
-        id_canonical = identify_file(canonical)
-        id_pretty = identify_file(pretty)
-        assert id_canonical == id_pretty
-
-    def test_pretty_and_canonical_same_id(self, tmp_path):
-        """Core requirement: pretty and canonical c4m produce same C4 ID."""
+    def test_pretty_and_canonical_files_have_different_ids(self, tmp_path):
         m = _build_test_manifest()
-
         canonical_text = dumps(m, pretty=False)
         pretty_text = dumps(m, pretty=True)
-
-        # Sanity: they are different strings
         assert canonical_text != pretty_text
-
-        # Write to files
         canonical_file = tmp_path / "project.c4m"
         canonical_file.write_text(canonical_text)
         pretty_file = tmp_path / "project_pretty.c4m"
         pretty_file.write_text(pretty_text)
-
-        # Both must produce the same C4 ID
-        assert identify_file(canonical_file) == identify_file(pretty_file)
+        # Two files, two byte IDs. The description both hold has one ID,
+        # which the decoder gives.
+        assert identify_file(canonical_file) != identify_file(pretty_file)
+        assert loads(canonical_text).compute_c4id() == loads(pretty_text).compute_c4id()
 
     def test_non_c4m_file_unchanged(self, tmp_path):
-        """Non-c4m files are identified by raw bytes as usual."""
         regular = tmp_path / "hello.txt"
         regular.write_bytes(b"hello world")
         assert identify_file(regular) == identify_bytes(b"hello world")
 
-    def test_non_c4m_extension_with_c4m_content(self, tmp_path):
-        """A .txt file containing c4m content is also canonicalized."""
-        canonical = _canonical_text()
+    def test_c4m_text_under_another_name_is_its_bytes(self, tmp_path):
+        text = _pretty_text()
         txt_file = tmp_path / "manifest.txt"
-        txt_file.write_text(canonical)
-        c4m_file = tmp_path / "manifest.c4m"
-        c4m_file.write_text(canonical)
+        txt_file.write_text(text)
+        assert identify_file(txt_file) == identify_bytes(text.encode("utf-8"))
 
-        # Both should produce the same ID since content is valid c4m
-        assert identify_file(txt_file) == identify_file(c4m_file)
-
-    def test_sha512_divergence(self, tmp_path):
-        """C4 ID of non-canonical c4m differs from raw SHA-512 hash."""
-        pretty_file = tmp_path / "pretty.c4m"
-        pretty_data = _pretty_text().encode("utf-8")
-        pretty_file.write_bytes(pretty_data)
-
-        c4id = identify_file(pretty_file)
-        raw_id = identify_bytes(pretty_data)
-
-        # Pretty form is NOT canonical, so identify_file (which canonicalizes)
-        # must produce a different ID than identify_bytes (which does not)
-        canonical = try_canonicalize(pretty_data)
-        if canonical is not None and canonical != pretty_data:
-            assert c4id != raw_id
+    def test_scan_records_each_files_byte_id(self, tmp_path):
+        tree = tmp_path / "tree"
+        tree.mkdir()
+        pretty = _pretty_text().encode("utf-8")
+        (tree / "pretty.c4m").write_bytes(pretty)
+        (tree / "copy.dat").write_bytes(pretty)
+        for store in (None, FSStore(tmp_path / "store")):
+            m = scan(tree, store=store)
+            for e in m.entries:
+                assert e.c4id == identify_bytes(pretty), (e.name, store)
 
 
-class TestStoreCanonical:
-    """FSStore.put() canonicalizes c4m content before storing."""
+class TestStoreKeepsBytes:
+    """FSStore.put() stores the bytes given, exactly."""
 
-    def test_store_canonical_c4m(self, tmp_path):
-        """Storing pretty c4m yields canonical content in store."""
+    def test_store_pretty_c4m_returns_it_exactly(self, tmp_path):
         store = FSStore(tmp_path)
-
         pretty_data = _pretty_text().encode("utf-8")
         c4id = store.put(BytesIO(pretty_data))
-
-        # Retrieve and verify it's canonical
-        content = store.get(c4id).read()
-        canonical_data = _canonical_text().encode("utf-8")
-        assert content == canonical_data
+        assert c4id == identify_bytes(pretty_data)
+        with store.get(c4id) as f:
+            assert f.read() == pretty_data
 
     def test_store_id_matches_identify_file(self, tmp_path):
-        """Store.put() and identify_file() produce the same ID for c4m content."""
-        store_dir = tmp_path / "store"
-        store = FSStore(store_dir)
-
+        store = FSStore(tmp_path / "store")
         pretty = _pretty_text()
         file_path = tmp_path / "test.c4m"
         file_path.write_text(pretty)
-
-        file_id = identify_file(file_path)
-        store_id = store.put(BytesIO(pretty.encode("utf-8")))
-
-        assert file_id == store_id
+        assert identify_file(file_path) == store.put(BytesIO(pretty.encode("utf-8")))
 
     def test_store_non_c4m_unchanged(self, tmp_path):
-        """Non-c4m content is stored as-is."""
         store = FSStore(tmp_path)
         data = b"not a c4m file"
         c4id = store.put(BytesIO(data))
@@ -238,7 +211,8 @@ class TestCanonicalRoundTrip:
         assert identify_bytes(data) == identify_bytes(re_encoded)
 
     def test_unsorted_entries_canonicalize(self, tmp_path):
-        """Entries in non-canonical order produce the same ID after sort."""
+        """Entries in non-canonical order describe the same tree: the
+        description ID agrees, and each file keeps its own byte ID."""
         canonical = _canonical_text()
         lines = canonical.strip().split("\n")
         reversed_text = "\n".join(reversed(lines)) + "\n"
@@ -248,4 +222,6 @@ class TestCanonicalRoundTrip:
         reversed_file = tmp_path / "reversed.c4m"
         reversed_file.write_text(reversed_text)
 
-        assert identify_file(forward_file) == identify_file(reversed_file)
+        assert loads(canonical).compute_c4id() == loads(reversed_text).compute_c4id()
+        assert identify_file(forward_file) == identify_bytes(canonical.encode("utf-8"))
+        assert identify_file(reversed_file) == identify_bytes(reversed_text.encode("utf-8"))
