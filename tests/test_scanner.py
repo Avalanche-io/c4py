@@ -262,6 +262,58 @@ class TestScanSymlinks:
         got = {e.name: e.target for e in scan(root, follow_symlinks=False).entries}
         assert got == {"trail": "target\\", "mid": "a\\b", "both": "dir/x\\y"}
 
+    @pytest.mark.skipif(not hasattr(os, "symlink"), reason="no symbolic links here")
+    def test_each_kind_of_link_is_recorded_as_go_records_it(self, tmp_path: Path):
+        # Go's computeSymlinkTargetC4ID: a link is an "l" entry under its
+        # own name; a file gets the file's ID, a directory the ID of that
+        # directory scanned; a dangling link, a link to a link, and a link
+        # to a directory already being resolved get none. A link to a
+        # directory used to be "to-dir/" with the empty listing's ID, and a
+        # link to a link the final file's ID (2026-11-11).
+        root = tmp_path / "t"
+        (root / "sub").mkdir(parents=True)
+        (root / "f.txt").write_bytes(b"hi\n")
+        (root / "sub" / "a").write_bytes(b"a\n")
+        (root / "d" / "deep").mkdir(parents=True)
+        (root / "d" / "deep" / "x").write_bytes(b"x")
+        try:
+            os.symlink("f.txt", root / "to-file")
+        except (OSError, NotImplementedError):
+            pytest.skip("cannot create symbolic links here")
+        os.symlink("sub", root / "to-dir")
+        os.symlink("to-file", root / "to-link")
+        os.symlink("missing", root / "dangling")
+        os.symlink("..", root / "sub" / "up")
+        os.symlink(".", root / "here")
+        os.symlink("d", root / "to-d")
+        os.symlink("..", root / "d" / "deep" / "up2")
+
+        m = scan(root, follow_symlinks=False)
+        got = _paths(m)
+
+        links = ["to-file", "to-dir", "to-link", "dangling", "sub/up", "here", "to-d", "d/deep/up2"]
+        for p in links:
+            assert p in got, p
+            assert got[p].is_symlink(), p
+            assert got[p].name == p.rsplit("/", 1)[-1], p
+            assert got[p].size == len(got[p].target), p
+        assert "to-dir/" not in got and "here/" not in got
+
+        assert got["to-file"].c4id == identify_bytes(b"hi\n")
+        assert got["to-dir"].c4id is not None
+        assert got["to-dir"].c4id == got["sub/"].c4id
+        assert got["to-link"].c4id is None
+        assert got["dangling"].c4id is None
+        # The scan root is being resolved: naming it does not recurse.
+        assert got["sub/up"].c4id is None
+        assert got["here"].c4id is None
+        # d is walked, not resolved, so up2 names it legitimately; inside
+        # that scan d is being resolved, so its own up2 is null there. to-d
+        # resolves d the same way.
+        assert got["d/deep/up2"].c4id is not None
+        assert got["d/deep/up2"].c4id == got["to-d"].c4id
+        assert got["to-d"].c4id != got["d/"].c4id
+
     def test_scan_follow_symlinks(self, tmp_path: Path):
         root = tmp_path / "follow"
         root.mkdir()
