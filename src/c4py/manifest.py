@@ -12,7 +12,7 @@ from collections.abc import Callable, Iterator
 from datetime import datetime
 from fnmatch import fnmatch
 
-from .entry import NULL_SIZE, NULL_TIMESTAMP, Entry, _human_size
+from .entry import NULL_SIZE, NULL_TIMESTAMP, Entry, _human_size, is_path_name
 from .id import C4ID
 
 
@@ -236,8 +236,15 @@ class Manifest:
 
         This matches the Go implementation: Canonicalize(), then Canonical(),
         then c4.Identify().
+
+        A manifest holding a name the format forbids, at any depth, has no
+        C4 ID: no conforming c4m text exists to hash. It gets the nil ID,
+        the format's "unavailable", as in Go; validate() names the entry.
         """
-        from .id import identify_bytes
+        from .id import C4ID, DIGEST_SIZE, identify_bytes
+
+        if any(is_path_name(e.name) for e in self.entries):
+            return C4ID(b"\x00" * DIGEST_SIZE)
 
         # Make a copy to avoid modifying the original
         canonical = self.copy()
@@ -256,9 +263,11 @@ class Manifest:
     def _canonical_text(self) -> str:
         """Generate canonical form text for C4 ID computation.
 
-        Matches Go's Manifest.Canonical(): only top-level entries.
+        Matches Go's Manifest.Canonical(): only top-level entries. A
+        manifest holding a name the format forbids has no canonical text,
+        and gives "", never text a reader would refuse.
         """
-        if not self.entries:
+        if not self.entries or any(is_path_name(e.name) for e in self.entries):
             return ""
 
         # Find minimum depth

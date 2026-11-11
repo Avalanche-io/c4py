@@ -31,6 +31,29 @@ NULL_TIMESTAMP = datetime(1970, 1, 1, tzinfo=timezone.utc)
 # Sentinel for null size
 NULL_SIZE = -1
 
+def is_path_name(name: str) -> bool:
+    """True if *name* is a path, not a bare entry name.
+
+    Only "/" separates paths in c4m, and a name may end in "/" only as a
+    directory's marker: a name holding any other "/", and the names ".",
+    "..", "./", "../", "/" and "" are path components (SPECIFICATION.md
+    "Invalid names"; the shared name-rule vector). Go: c4m.isPathName.
+    """
+    if name == "":
+        return True
+    base = name[:-1] if name.endswith("/") else name
+    return base in ("", ".", "..") or "/" in base or "\x00" in base
+
+
+def os_mode(mode: int) -> int:
+    """The operating-system bits of a c4m mode: type and permissions.
+
+    Strips the ZERO_MODE sentinel, so the result fits a 16-bit mode_t
+    and can be handed to the C-backed ``stat`` helpers (S_ISDIR, S_IFMT,
+    S_IMODE), which raise OverflowError on bit 18 where mode_t is 16 bits.
+    """
+    return mode & 0o177777
+
 # Sequence pattern: matches [0001-0100], [01-50,75-100], [001,005,010], etc.
 SEQUENCE_PATTERN = re.compile(r"\[([0-9,\-:]+)\]")
 

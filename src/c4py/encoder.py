@@ -19,6 +19,7 @@ from .entry import (
     format_mode,
     format_name,
     format_target,
+    is_path_name,
 )
 from .manifest import Manifest
 
@@ -64,7 +65,19 @@ def dumps(manifest: Manifest, *, pretty: bool = False) -> str:
     - Local timestamps
 
     Reference: github.com/Avalanche-io/c4/c4m/encoder.go
+
+    Raises:
+        ValueError: an entry's name is a path, not a bare entry name (a "/"
+            other than a directory's trailing one, or ".", "..", "./",
+            "../", "/"). Every decoder refuses such a line, so it is never
+            written (name-rule vector); nothing is returned.
     """
+    for e in manifest.entries:
+        if is_path_name(e.name):
+            raise ValueError(
+                f"name {e.name!r} is a path, not an entry name "
+                "(only a directory's trailing / is allowed)"
+            )
     # Sort a copy to avoid mutating the caller's manifest
     m = manifest.copy()
     m.sort_entries()
