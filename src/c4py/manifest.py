@@ -374,18 +374,22 @@ def _calculate_directory_size(dir_entry: Entry, children: list[Entry]) -> int:
     """Compute total size of direct children plus the byte length of the
     directory's own canonical c4m content.  Nil-infectious.
 
-    A childless directory with a C4 ID other than the empty listing's is
-    collapsed: its listing lives under that ID, not here, so its size
-    cannot be derived and stays null. Through 1.0.26 any childless
-    directory gave 0, an invented value compute_c4id then hashed
-    (childless-dir vector). On this line a childless directory with no ID
-    still gives 0, as the Go reference's 1.0.x line does; main keeps that
-    size null, a known 1.0.x difference the vector's unread/ pins.
+    A directory with no listed children is empty (size 0) only when its
+    ID says so: an empty listing hashes to the empty-content ID. A
+    childless directory with no ID is one nobody read (a directory the
+    scan could not list, or a hand-written line): its size stays null,
+    because 0 beside no ID would claim a known empty that nothing here
+    knows. A childless directory with any other ID is collapsed: its
+    listing lives under that ID, not here, so its size cannot be derived
+    and stays null. Through 1.0.26 any childless directory gave 0, an
+    invented value compute_c4id then hashed (childless-dir vector). A scan
+    states 0 for a directory it listed as empty. Mirrors Go's
+    propagateMetadata.
     """
     if not children:
-        if dir_entry.c4id is not None and str(dir_entry.c4id) != _EMPTY_LISTING_ID:
-            return NULL_SIZE
-        return 0
+        if dir_entry.c4id is not None and str(dir_entry.c4id) == _EMPTY_LISTING_ID:
+            return 0
+        return NULL_SIZE
     total = 0
     for e in children:
         if e.size < 0:

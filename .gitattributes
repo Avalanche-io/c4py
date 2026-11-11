@@ -5,3 +5,4 @@ tests/vectors/link-target-vector/* -text
 tests/vectors/backslash-name-vector/* -text
 tests/vectors/damaged-line-vector/* -text
 tests/vectors/childless-dir-vector/* -text
+tests/vectors/blind-upgrade/* -text
