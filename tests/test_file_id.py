@@ -1,14 +1,12 @@
-"""Tests for c4m canonical identification.
-
-A pretty-printed c4m and its canonical form must produce the same C4 ID.
-Non-canonical c4m files are ephemeral views — the durable identity is always
-computed from canonical bytes.
+"""A file's C4 ID is the ID of its bytes, c4m text included, and a
+description's C4 ID is what its decoded text resolves to: two questions,
+two answers. A pretty file and a canonical file holding the same description
+have different file IDs and the same description ID.
 """
 
 from datetime import datetime, timezone
 from io import BytesIO
 
-from c4py.canonical import _looks_like_c4m, try_canonicalize
 from c4py.decoder import loads
 from c4py.encoder import dumps
 from c4py.entry import Entry
@@ -51,76 +49,6 @@ def _canonical_text() -> str:
 
 def _pretty_text() -> str:
     return dumps(_build_test_manifest(), pretty=True)
-
-
-class TestLooksLikeC4m:
-    """Heuristic detection of c4m content."""
-
-    def test_canonical_entry(self):
-        data = b"-rw-r--r-- 2025-09-01T00:36:18Z 1024 test.txt -\n"
-        assert _looks_like_c4m(data)
-
-    def test_directory_entry(self):
-        data = b"drwxr-xr-x 2025-09-01T00:36:18Z 1024 testdir/ -\n"
-        assert _looks_like_c4m(data)
-
-    def test_symlink_entry(self):
-        data = b"lrwxr-xr-x 2025-09-01T00:36:18Z 1024 link -> target -\n"
-        assert _looks_like_c4m(data)
-
-    def test_null_mode_entry(self):
-        data = b"- - - test.txt -\n"
-        assert _looks_like_c4m(data)
-
-    def test_not_c4m(self):
-        data = b"This is just a plain text file.\n"
-        assert not _looks_like_c4m(data)
-
-    def test_binary_content(self):
-        data = b"\x00\x01\x02\xff\xfe"
-        assert not _looks_like_c4m(data)
-
-    def test_empty(self):
-        data = b""
-        assert not _looks_like_c4m(data)
-
-    def test_blank_lines_before_entry(self):
-        data = b"\n\n-rw-r--r-- 2025-09-01T00:36:18Z 1024 test.txt -\n"
-        assert _looks_like_c4m(data)
-
-
-class TestTryCanonicalize:
-    """Canonicalization of c4m content."""
-
-    def test_canonical_is_stable(self):
-        """Canonical form canonicalizes to itself."""
-        data = _canonical_text().encode("utf-8")
-        result = try_canonicalize(data)
-        assert result is not None
-        assert result == data
-
-    def test_pretty_canonicalizes(self):
-        """Pretty-printed c4m canonicalizes to canonical form."""
-        pretty_data = _pretty_text().encode("utf-8")
-        result = try_canonicalize(pretty_data)
-        assert result is not None
-        canonical_data = _canonical_text().encode("utf-8")
-        result_canon = try_canonicalize(canonical_data)
-        assert result == result_canon
-
-    def test_non_c4m_returns_none(self):
-        """Non-c4m content returns None."""
-        data = b"Just some regular text content.\n"
-        assert try_canonicalize(data) is None
-
-    def test_binary_returns_none(self):
-        """Binary content returns None."""
-        data = b"\x00\x01\x02\xff\xfe"
-        assert try_canonicalize(data) is None
-
-    def test_empty_returns_none(self):
-        """Empty content returns None."""
-        assert try_canonicalize(b"") is None
 
 
 class TestFileIDIsItsBytes:
