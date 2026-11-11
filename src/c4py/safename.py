@@ -87,8 +87,13 @@ def safe_name(raw: str) -> str:
     if not needs_encoding:
         return raw
 
-    # Encode byte-by-byte through UTF-8, matching Go's behavior
-    raw_bytes = raw.encode("utf-8")
+    # Encode byte-by-byte through UTF-8, matching Go's behavior. A name
+    # holding bytes that are not UTF-8 reaches Python surrogate-escaped
+    # (os.fsdecode, and unsafe_name below, carry each such byte as
+    # U+DC80..U+DCFF); "surrogateescape" gives back the original bytes, which
+    # Tier 3 encodes. Strict encoding raised here, so a tree holding such a
+    # name could not be written or identified (SafeName vector).
+    raw_bytes = raw.encode("utf-8", "surrogateescape")
     result: list[str] = []
     pending: list[int] = []  # Tier 3 accumulator
 
