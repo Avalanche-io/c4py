@@ -453,26 +453,37 @@ class TestNestedDirectories:
         assert y.size == z.size + len(z.canonical()) + 1
 
     @pytest.mark.skipif(
-        not (shutil.which("c4") or Path("/opt/homebrew/bin/c4").is_file()),
-        reason="c4 CLI not installed",
+        not (os.environ.get("C4_BIN") or shutil.which("c4")),
+        reason="c4 CLI not installed (set C4_BIN or put c4 on PATH)",
     )
     def test_matches_go_cli_byte_for_byte(self, tmp_path: Path):
+        # `c4 id <dir>` streams a chain (the listing with directory
+        # aggregates null, a bare boundary ID, then a refinement patch);
+        # `c4 patch -` flattens it to the one plain c4m c4py writes. Needs a
+        # c4 at or after the commit CI pins (.github/workflows/ci.yml);
+        # released 1.0.x has no `c4 patch -`.
         import io
-        import os
         import subprocess
 
         import c4py
 
         root = _nested_tree(tmp_path)
-        c4 = shutil.which("c4") or "/opt/homebrew/bin/c4"
+        c4 = os.environ.get("C4_BIN") or shutil.which("c4")
         env = dict(os.environ, HOME=str(tmp_path), C4_STORE=str(tmp_path / "store"))
-        go = subprocess.run(
-            [c4, "id", str(root)], capture_output=True, text=True, check=True, env=env
-        ).stdout
 
+        def run(*args: str, stdin: bytes | None = None) -> bytes:
+            return subprocess.run(
+                [c4, *args], input=stdin, capture_output=True, check=True, env=env
+            ).stdout
+
+        flat = run("patch", "-", stdin=run("id", str(root)))
+        go_id = run("id", "-q", str(root)).decode().strip()
+
+        m = c4py.scan(root)
         buf = io.StringIO()
-        c4py.dump(c4py.scan(root), buf)
-        assert buf.getvalue() == go
+        c4py.dump(m, buf)
+        assert buf.getvalue().encode("utf-8") == flat
+        assert str(m.compute_c4id()) == go_id
 
 
 class TestDirectoryTimestamp:

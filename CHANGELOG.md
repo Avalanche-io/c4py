@@ -10,8 +10,12 @@ and `scripts/check_skips.py` (stdlib only) prints every skipped or xfailed
 test with its reason and fails on one that `tests/allowed-skips.txt` does
 not name for that platform (`sys.platform`, or `*`). A listed skip that did
 not happen is reported, not failed on. Measured on every CI leg first: the
-only skip is `test_matches_go_cli_byte_for_byte`, which needs the Go c4 CLI
-that CI does not install; it is listed for every platform.
+only skip was `test_matches_go_cli_byte_for_byte`, which needs the Go c4
+CLI. CI now installs it (`go install …/cmd/c4@5ee54b6`, pinned), the test
+finds it through `C4_BIN` or PATH, and the allow-list is empty. The test
+now compares c4py's output with the flattened form, `c4 id <dir> | c4 patch
+-` (c4 master's `c4 id` streams a chain), and checks that `c4 id -q <dir>`
+equals c4py's description ID. Both match on every leg.
 
 ### ⚠ SafeName's printable test is pinned to Unicode 17.0.0
 

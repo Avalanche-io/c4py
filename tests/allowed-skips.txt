@@ -5,8 +5,6 @@
 # platform where its condition genuinely holds.
 #
 # Measured 2026-11-13 on CI (ubuntu-latest and macos-latest, Python
-# 3.10-3.13, non-root): this was the only skip on every leg.
-
-# Compares against the Go c4 CLI, which CI does not install. A local run
-# with c4 on PATH runs it.
-*     tests.test_scanner.TestNestedDirectories::test_matches_go_cli_byte_for_byte  # c4 CLI not installed
+# 3.10-3.13, non-root). The only skip was the Go CLI comparison in
+# tests/test_scanner.py; CI now installs the c4 CLI so it runs, and the
+# list is empty. Nothing may skip on any leg.
