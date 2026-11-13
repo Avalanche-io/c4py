@@ -7,8 +7,8 @@ unseen (sequence-null-size vector; decided 2026-11-13 by the release lead;
 reversible).
 
 Each vendored vector README carries a ``## Round trip`` table (c4 #158 at
-9c42890), which Go's ``TestVectorRoundTrip`` reads and every port runs. This test parses the same table; it hardcodes no classification.
-Each ``.c4m`` file is decoded and encoded canonically, and SHA-512 digests
+7cdc9f3), which Go's ``TestVectorRoundTrip`` reads and every port runs.
+This test parses the same table; it hardcodes no classification. Each ``.c4m`` file is decoded and encoded canonically, and SHA-512 digests
 from ``hashlib`` (never c4py's own C4 ID code) are compared. The second
 cell of a row is one of:
 
