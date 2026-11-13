@@ -32,7 +32,10 @@ print(f"+{len(diff.added)} -{len(diff.removed)} ~{len(diff.modified)}")
 pip install c4py
 ```
 
-Tested on Linux and macOS with Python 3.10 to 3.13. Not tested on Windows.
+Tested on Linux and macOS with Python 3.10 to 3.13. Not tested on Windows:
+no CI job runs there, so the modes a Windows scan records are not measured
+against the reference (see "Modes on Windows" in c4's
+[c4m/METADATA_COVERAGE.md](https://github.com/Avalanche-io/c4/blob/master/c4m/METADATA_COVERAGE.md)).
 
 ## What is C4?
 
