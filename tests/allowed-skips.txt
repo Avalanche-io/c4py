@@ -1,0 +1,5 @@
+# Tests allowed to skip in CI, by platform (sys.platform: linux, darwin,
+# win32; "*" for any) and test id (<classname>::<name> from pytest's
+# --junitxml), each with why. A skip not listed here fails CI
+# (scripts/check_skips.py). A shared-vector test may be listed only for a
+# platform where its condition genuinely holds.

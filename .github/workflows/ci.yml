@@ -20,4 +20,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
-      - run: python -m pytest
+      - run: python -m pytest --junitxml=junit.xml
+      - name: Skips the allow-list names
+        if: success() || failure()
+        run: python scripts/check_skips.py junit.xml --allow tests/allowed-skips.txt --report-only
