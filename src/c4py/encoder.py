@@ -84,12 +84,22 @@ def dumps(manifest: Manifest, *, pretty: bool = False) -> str:
 
     indent_width = 2
 
+    # Inline range data (a folded sequence's bare-concatenated member ID
+    # lists) trails the entries, one line per list, sorted by its C4 ID's
+    # string, as the Go encoder writes it. It is not part of the
+    # description's identity. Through 2026-11-13 the encoder dropped it, so
+    # re-encoding a decoded c4m that carried it lost the member lists.
+    tail: list[str] = []
+    for key in sorted(m._range_data, key=str):
+        tail.extend([str(m._range_data[key]), "\n"])
+
     if not pretty:
         # Canonical mode
         lines: list[str] = []
         for entry in m.entries:
             lines.append(entry.format(indent_width, pretty=False))
             lines.append("\n")
+        lines.extend(tail)
         return "".join(lines)
 
     # Pretty mode
@@ -107,6 +117,7 @@ def dumps(manifest: Manifest, *, pretty: bool = False) -> str:
         line = _format_entry_pretty(entry, indent_width, max_size, c4id_column)
         lines.append(line)
         lines.append("\n")
+    lines.extend(tail)
     return "".join(lines)
 
 
