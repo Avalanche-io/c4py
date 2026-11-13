@@ -23,4 +23,4 @@ jobs:
       - run: python -m pytest --junitxml=junit.xml
       - name: Skips the allow-list names
         if: success() || failure()
-        run: python scripts/check_skips.py junit.xml --allow tests/allowed-skips.txt --report-only
+        run: python scripts/check_skips.py junit.xml --allow tests/allowed-skips.txt

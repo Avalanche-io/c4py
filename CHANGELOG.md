@@ -2,6 +2,17 @@
 
 ## Unreleased (1.1)
 
+### CI fails on a test skip the allow-list does not name
+
+A port can diverge silently from a shared vector when the comparison test
+skips (c4py's NBSP case was one). CI now runs pytest with `--junitxml`,
+and `scripts/check_skips.py` (stdlib only) prints every skipped or xfailed
+test with its reason and fails on one that `tests/allowed-skips.txt` does
+not name for that platform (`sys.platform`, or `*`). A listed skip that did
+not happen is reported, not failed on. Measured on every CI leg first: the
+only skip is `test_matches_go_cli_byte_for_byte`, which needs the Go c4 CLI
+that CI does not install; it is listed for every platform.
+
 ### ⚠ SafeName's printable test is pinned to Unicode 17.0.0
 
 SafeName writes a character as itself (Tier 1) when it is printable. c4py
