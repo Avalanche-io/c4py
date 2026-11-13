@@ -24,8 +24,9 @@ jobs:
           go-version: stable
           cache: false
       # The Go c4 CLI that test_matches_go_cli_byte_for_byte compares
-      # against. Pinned to a c4 commit: bump it deliberately, and expect
-      # that test to tell you whether c4py still matches.
+      # against. Pinned to a c4 commit: the pin moves deliberately, when
+      # core changes its output or IDs, and that test then shows whether
+      # c4py still matches.
       - name: Install the c4 CLI (c4 5ee54b6)
         run: |
           go install github.com/Avalanche-io/c4/cmd/c4@5ee54b6
