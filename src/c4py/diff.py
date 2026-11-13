@@ -292,7 +292,7 @@ def _flatten_patch_tree(node: _PatchNode, depth: int, result: list[Entry]) -> No
                 _flatten_patch_tree(child, depth + 1, result)
 
 
-def apply_patch(base: Manifest, patch_entries: list[Entry]) -> Manifest:
+def apply_patch(base: Manifest, patch_entries: list[Entry] | Manifest) -> Manifest:
     """Apply patch entries to a base manifest.
 
     Semantics:
@@ -303,13 +303,26 @@ def apply_patch(base: Manifest, patch_entries: list[Entry]) -> Manifest:
     - Same path, different content -> modification (replace entry, recurse for dirs)
     - New path -> addition
 
+    The result keeps the range data (inline ID lists) of the base and, when
+    the patch is given as a Manifest, of the patch too, the patch's winning
+    on a shared key, as Go's ``ApplyPatch`` (``c4m/operations.go``) merges
+    ``RangeData``. Through 2026-11-13 the result kept none, so a sequence's
+    member ID list was lost on every patch (decided 2026-11-13 by the
+    release lead; reversible).
+
     Args:
         base: the manifest to patch
-        patch_entries: entries from the patch section
+        patch_entries: entries from the patch section, or the patch section
+            as a Manifest (its range data then joins the result's)
 
     Returns:
         New manifest with patch applied
     """
+    patch_range: dict = {}
+    if isinstance(patch_entries, Manifest):
+        patch_range = patch_entries._range_data
+        patch_entries = patch_entries.entries
+
     base_tree = _build_patch_tree(base.entries)
     patch_tree = _build_patch_tree(patch_entries)
     _apply_patch_tree(base_tree, patch_tree)
@@ -319,6 +332,7 @@ def apply_patch(base: Manifest, patch_entries: list[Entry]) -> Manifest:
 
     result = Manifest(entries=entries)
     result.sort_entries()
+    result._range_data = {**base._range_data, **patch_range}
     return result
 
 
@@ -340,8 +354,11 @@ def resolve_chain(manifest: Manifest) -> Manifest:
     if not sections or len(sections) <= 1:
         return manifest
 
-    # First section is the base
+    # First section is the base; the manifest's range data (inline ID
+    # lists) carries through every patch, as Go's resolution merges each
+    # layer's RangeData.
     current = Manifest(entries=list(sections[0]))
+    current._range_data = dict(manifest._range_data)
 
     # Apply subsequent patches
     for i in range(1, len(sections)):

@@ -732,7 +732,6 @@ def _apply_patch(base: Manifest, patch: Manifest) -> Manifest:
     decoder used to carry its own copy, which still read a directory restated
     with children under it as a removal (erratum 2026-07-31).
     """
-    result = apply_patch(base, patch.entries)
+    result = apply_patch(base, patch)  # merges base's and patch's range data
     result.base = base.base
-    result._range_data = base._range_data
     return result
