@@ -7,7 +7,8 @@ canonical form is required for C4 ID computation.
 The decoder must understand:
 - **Patch boundaries**: A line containing exactly one 90-char C4 ID (starting
   with "c4") separates patch sections. First = external base ref, subsequent =
-  checkpoints.
+  checkpoints. A stream ends on an entry line: a bare C4 ID at end of input
+  is TrailingIDError (ruled 2026-11-08).
 - **Inline ID lists**: Lines longer than 90 chars where length is a multiple of
   90 and every 90-char chunk is a valid C4 ID. These are range data (concatenated
   IDs for sequence entries) and must be skipped during patch chain parsing — they
@@ -42,6 +43,28 @@ from .manifest import Manifest
 
 # C4 ID pattern: c4 followed by 88 base58 characters
 _C4ID_PATTERN = re.compile(r"^c4[1-9A-HJ-NP-Za-km-z]{88}$")
+
+
+class TrailingIDError(ValueError):
+    """The c4m text ends with a bare C4 ID.
+
+    A c4m file never ends with its own ID: a bare C4 ID is either the
+    first-line external base reference or a checkpoint before a patch
+    section, and one at end of input is a format error (ruled 2026-11-08).
+    Files written by c4 1.0.13 through 1.0.26 with ``c4 diff >>`` have this
+    shape; ``c4 id FILE.c4m`` (c4 1.1) rewrites them. A ``ValueError``
+    subclass, so callers catching ``ValueError`` still catch it.
+
+    Reference: c4m.ErrTrailingID in github.com/Avalanche-io/c4/c4m/errors.go
+    """
+
+    def __init__(self, line: int) -> None:
+        self.line = line
+        super().__init__(
+            "c4m: a bare C4 ID ends the file; a c4m file never ends with its "
+            f"own ID (line {line}): delete that line, or rewrite the file "
+            "with `c4 id FILE.c4m > fixed.c4m`"
+        )
 
 
 def load(source: str | IO[str]) -> Manifest:
@@ -87,6 +110,7 @@ class _Decoder:
         section: list[Entry] = []
         first_line = True
         patch_mode = False
+        last_checkpoint_line = 0  # line of the latest checkpoint, 0 after an entry
 
         lines = text.split("\n")
 
@@ -134,8 +158,9 @@ class _Decoder:
                     # manifest state (grammar erratum, 2026-07-13). Flush
                     # the pending section, then verify. A checkpoint
                     # directly following another (consecutive boundaries)
-                    # verifies the same accumulated state; at EOF the final
-                    # checkpoint is the chain's closing validator.
+                    # verifies the same accumulated state. A checkpoint at
+                    # end of input is a format error (see the flush below).
+                    last_checkpoint_line = self.line_num
                     if not patch_mode:
                         m.entries.extend(section)
                     elif section:
@@ -170,11 +195,20 @@ class _Decoder:
             if entry is not None:
                 section.append(entry)
             first_line = False
+            last_checkpoint_line = 0
 
-        # Flush remaining section. A stream may end without a closing
-        # validator (the final patch applies unverified); a stream whose
-        # last line was a bare C4 ID ended with its closing validator,
-        # already verified above.
+        # A bare C4 ID at end of input is a format error: a c4m file never
+        # ends with its own ID (a bare ID is a boundary before a patch, and
+        # a file cannot contain the ID that names it; ruled 2026-11-08).
+        # The checkpoint was verified above, so a wrong trailing ID is
+        # reported as a patch ID mismatch first, as in c4 core. A file that
+        # is only a first-line base reference is not a trailing ID.
+        if last_checkpoint_line:
+            raise TrailingIDError(last_checkpoint_line)
+
+        # Flush the remaining section: a chain ends on its last section's
+        # entries, and the final patch is verified by what it names, not by
+        # a line after it.
         if not patch_mode:
             m.entries.extend(section)
         elif section:

@@ -175,8 +175,15 @@ def patch_diff(old: Manifest, new: Manifest) -> str:
     This output can be appended to old.c4m to create a version chain:
         c4 diff before.c4m after.c4m >> before.c4m
 
+    Nothing follows the entries: a c4m file never ends with a bare C4 ID
+    (ruled 2026-11-08), so the new state's ID is never written; it is
+    ``new.compute_c4id()``. For the same reason, when old and new are
+    identical the result is the empty string, as ``c4 diff`` prints nothing:
+    the old ID alone, appended to old.c4m, would end the file with a bare ID.
+
     Returns:
-        c4m patch text (str), starting with the base C4 ID line
+        c4m patch text (str), starting with the base C4 ID line, or "" when
+        there is nothing to patch
     """
     old_id = old.compute_c4id()
 
@@ -206,7 +213,10 @@ def patch_diff(old: Manifest, new: Manifest) -> str:
                 # Modification — emit new entry
                 patch_entries.append(new_entry)
 
-    # Build output: base C4 ID line + patch entries
+    if not patch_entries:
+        return ""
+
+    # Build output: base C4 ID line + patch entries, and nothing after them
     lines: list[str] = [str(old_id)]
     for entry in patch_entries:
         lines.append(entry.format())

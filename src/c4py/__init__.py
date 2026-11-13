@@ -20,7 +20,7 @@
 
 from __future__ import annotations
 
-from .decoder import load, loads
+from .decoder import TrailingIDError, load, loads
 from .diff import (
     Conflict,
     DiffResult,
@@ -75,6 +75,7 @@ __all__ = [
     # I/O
     "load",
     "loads",
+    "TrailingIDError",
     "dump",
     "dumps",
     "scan",

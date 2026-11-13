@@ -139,7 +139,10 @@ diff.removed    # entries only in old
 diff.modified   # same path, different content
 diff.same       # identical entries
 
-# Produce a c4m patch (like `c4 diff before.c4m after.c4m`)
+# Produce a c4m patch (like `c4 diff before.c4m after.c4m`): the old
+# state's ID, then the entries, nothing after them ("" when nothing changed).
+# Appending it to before.c4m grows the chain. A c4m file never ends with a
+# bare C4 ID; c4py.load refuses one with c4py.TrailingIDError.
 patch_text = c4py.patch_diff(old_manifest, new_manifest)
 
 # c4m files can contain version histories (base + patches)

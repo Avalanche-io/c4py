@@ -20,7 +20,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from c4py.decoder import loads
+import pytest
+
+from c4py.decoder import TrailingIDError, loads
 from c4py.diff import apply_patch
 
 DEEPEN_VECTOR = Path(__file__).parent / "vectors" / "deepen-vector"
@@ -46,9 +48,10 @@ def _names(m) -> set[str]:
 class TestDeepenVector:
     """Conformance is on the resolved entry set, not only on the ID.
 
-    A decoder carrying the old rule rejects deepen.c4m at its closing
-    validator, having resolved it to remove.c4m's state; a non-verifying
-    reader returns the wrong manifest at exit 0. Both are caught here.
+    A decoder carrying the old rule resolves deepen.c4m to remove.c4m's
+    state at exit 0: since 2026-11-08 nothing in the file verifies the final
+    state (the trailing ID line was removed), so the entry set and the
+    root-id file are the check.
     """
 
     def test_resolves_through_the_decoder(self):
@@ -61,6 +64,14 @@ class TestDeepenVector:
         # the same restated directory means opposite things depending on
         # whether children follow it
         assert ids["deepen.c4m"] != ids["remove.c4m"]
+
+    def test_vectors_end_on_an_entry_and_refuse_their_own_id(self):
+        """Each vector ends on an entry; its root ID appended is a trailing ID."""
+        for file, id_file, _ in CASES:
+            text = _read(file)
+            assert not _is_bare_id(text.rstrip("\n").split("\n")[-1]), file
+            with pytest.raises(TrailingIDError):
+                loads(text + _read(id_file).strip() + "\n")
 
     def test_apply_patch_directly(self):
         """The rule itself, independent of chain decoding: base, then patch."""
