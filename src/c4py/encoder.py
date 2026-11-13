@@ -173,7 +173,7 @@ def _format_entry_pretty(
         time_str = _format_timestamp_pretty(entry.timestamp)
 
     # Format size with padding and commas
-    if entry.size < 0:
+    if entry.has_null_size():
         max_size_str = _format_size_with_commas(max_size)
         padding = len(max_size_str) - 1
         size_str = " " * padding + "-"

@@ -292,6 +292,11 @@ class _Decoder:
         entry.hard_link = hard_link
         entry.flow_direction = flow_dir
         entry.flow_target = flow_target
+        # A 0 beside the C4 ID of non-empty content is a null size written
+        # by a surface that has no "-" (a mount); hold it as null so every
+        # consumer sees one value for one meaning (c4 core PR #68).
+        if entry.has_null_size():
+            entry.size = NULL_SIZE
 
         # Check for sequence notation in the RAW name (before unescaping)
         if _has_unescaped_sequence_notation(raw_name):

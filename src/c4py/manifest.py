@@ -12,15 +12,21 @@ from collections.abc import Callable, Iterator
 from datetime import datetime
 from fnmatch import fnmatch
 
-from .entry import NULL_SIZE, NULL_TIMESTAMP, Entry, _human_size, is_path_name
+from .entry import (
+    EMPTY_CONTENT_ID,
+    NULL_SIZE,
+    NULL_TIMESTAMP,
+    Entry,
+    _human_size,
+    is_path_name,
+)
 from .id import C4ID
 
-# The C4 ID of an empty listing: the ID of zero bytes (SPECIFICATION.md,
-# "Empty and Unread Directories"). A directory with no listed children and
-# this ID is known to be empty.
-_EMPTY_LISTING_ID = (
-    "c459dsjfscH38cYeXXYogktxf4Cd9ibshE3BHUo6a58hBXmRQdZrAkZzsWcbWtDg5oQstpDuni4Hirj75GEmTc1sFT"
-)
+# The C4 ID of an empty listing is the ID of zero bytes (SPECIFICATION.md,
+# "Empty and Unread Directories"): one value, EMPTY_CONTENT_ID, named here
+# for the directory reading. A directory with no listed children and this
+# ID is known to be empty.
+_EMPTY_LISTING_ID = EMPTY_CONTENT_ID
 
 
 class Manifest:
@@ -112,7 +118,7 @@ class Manifest:
         """Total size of all file entries in bytes."""
         total = 0
         for _, entry in self.files():
-            if entry.size != NULL_SIZE:
+            if not entry.has_null_size():
                 total += entry.size
         return total
 
@@ -339,14 +345,14 @@ def _propagate_metadata(entries: list[Entry]) -> None:
         has_null = (
             (entry.mode == 0 and not entry.is_dir() and not entry.is_symlink())
             or entry.timestamp == NULL_TIMESTAMP
-            or entry.size < 0
+            or entry.has_null_size()
         )
         if not has_null:
             continue
 
         children = _get_directory_children(entries, entry, i)
 
-        if entry.size < 0:
+        if entry.has_null_size():
             entry.size = _calculate_directory_size(entry, children)
 
         if entry.timestamp == NULL_TIMESTAMP:
@@ -386,12 +392,12 @@ def _calculate_directory_size(dir_entry: Entry, children: list[Entry]) -> int:
     propagateMetadata.
     """
     if not children:
-        if dir_entry.c4id is not None and str(dir_entry.c4id) == _EMPTY_LISTING_ID:
+        if dir_entry.c4id is not None and dir_entry.c4id == _EMPTY_LISTING_ID:
             return 0
         return NULL_SIZE
     total = 0
     for e in children:
-        if e.size < 0:
+        if e.has_null_size():
             return NULL_SIZE
         total += e.size
     total += _c4m_content_size(children)

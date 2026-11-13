@@ -483,16 +483,16 @@ def _propagate_metadata(entry: Entry, children: list[Entry]) -> None:
     which must already be resolved (including subdirectory C4 IDs)."""
     if not children:
         # Empty directory: size is known to be 0, not unknown.
-        if entry.size < 0:
+        if entry.has_null_size():
             entry.size = 0
         return
 
     # Propagate size if null
-    if entry.size < 0:
+    if entry.has_null_size():
         total = 0
         null_found = False
         for child in children:
-            if child.size < 0:
+            if child.has_null_size():
                 null_found = True
                 break
             total += child.size

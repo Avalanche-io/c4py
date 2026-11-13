@@ -31,6 +31,13 @@ NULL_TIMESTAMP = datetime(1970, 1, 1, tzinfo=timezone.utc)
 # Sentinel for null size
 NULL_SIZE = -1
 
+# The C4 ID of zero bytes: the only C4 ID a size of 0 can truthfully sit
+# beside, and the ID of an empty directory's listing. Mirrors Go's
+# c4m.EmptyContentID.
+EMPTY_CONTENT_ID = C4ID(
+    "c459dsjfscH38cYeXXYogktxf4Cd9ibshE3BHUo6a58hBXmRQdZrAkZzsWcbWtDg5oQstpDuni4Hirj75GEmTc1sFT"
+)
+
 # Null mode: the integer 0, written "-". Unknown permissions.
 NULL_MODE = 0
 
@@ -129,7 +136,26 @@ class Entry:
         return self.timestamp == NULL_TIMESTAMP
 
     def has_null_size(self) -> bool:
-        return self.size == NULL_SIZE
+        """True if the entry's size is unknown: the one test for a null size.
+
+        -1 is null. So is a stated 0 beside the C4 ID of content that is
+        not empty: a filesystem surface has no number for "unknown", so a
+        null size can only materialise as 0, and a 0 is contradicted by
+        every C4 ID except the empty content's (ruled 2026-11-08, landed
+        in c4 core PR #68 on 2026-11-13). A 0 with no C4 ID is a known
+        zero (a structure-level scan of an empty file). Symlinks are
+        exempt: their size is the link's own and their C4 ID is the
+        target's. Mirrors Go's Entry.SizeIsNull.
+        """
+        if self.size < 0:
+            return True
+        return (
+            self.size == 0
+            and self.c4id is not None
+            and not self.c4id.is_nil()
+            and self.c4id != EMPTY_CONTENT_ID
+            and not self.is_symlink()
+        )
 
     def has_null_c4id(self) -> bool:
         return self.c4id is None
@@ -140,7 +166,7 @@ class Entry:
 
     def human_size(self) -> str:
         """Human-readable size string (e.g. '4.2 GB', '1.3 KB')."""
-        if self.size == NULL_SIZE:
+        if self.has_null_size():
             return "-"
         return _human_size(self.size)
 
@@ -162,7 +188,7 @@ class Entry:
         ts_str = format_timestamp(self.timestamp)
 
         # Size: plain integer, no commas
-        size_str = format_size(self.size)
+        size_str = "-" if self.has_null_size() else format_size(self.size)
 
         # Name with SafeName + field-boundary escaping
         name_str = format_name(self.name, self.is_sequence)
@@ -207,7 +233,7 @@ class Entry:
         ts_str = format_timestamp(self.timestamp)
 
         # Size
-        size_str = format_size(self.size)
+        size_str = "-" if self.has_null_size() else format_size(self.size)
 
         # Name
         name_str = format_name(self.name, self.is_sequence)

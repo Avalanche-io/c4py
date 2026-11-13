@@ -14,6 +14,24 @@ description ID (`compute_c4id`) is unchanged. `patch_diff` already writes
 its own first line (the old state's ID) and never writes either input's
 base.
 
+### ⚠ A size of 0 beside a C4 ID other than the empty content's is null
+
+Only the empty content has size 0. A `0` on a file or directory line
+beside any other C4 ID is therefore a null size written by a surface that
+has no `-` (a mount), and is read as one (ruled 2026-11-08; c4 core PR
+#68, landed 2026-11-13, decided by the release lead; reversible).
+`Entry.has_null_size()` is now the one test: the decoder holds such a `0`
+as -1, canonical form and both encoders write `-`, and the parent
+directory's size goes null over it, so `0 f <ID>` and `- f <ID>` are one
+description with one ID. A `0` with no C4 ID, a `0` with the empty
+content's ID, and a symlink's `0` stay known zeros.
+`c4py.entry.EMPTY_CONTENT_ID` names the ID of zero bytes.
+
+This changes the C4 ID of any description holding the combination,
+including one built through the API with `size=0` beside a real content
+ID. No shipped scanner writes it. The shared `null-size-vector` fixture
+is copied from c4 core.
+
 ### ⚠ Breaking: a c4m file that ends with a bare C4 ID is refused
 
 A c4m file never ends with its own ID (ruled 2026-11-08). A bare C4 ID is
