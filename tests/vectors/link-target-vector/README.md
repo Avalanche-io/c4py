@@ -61,3 +61,21 @@ A symlink whose target has the shape of a flow target (`host:path`,
 `C:foo`) cannot be told from a flow link when the mode is null; the Go
 decoder reads it as a flow link. That reading awaits a ruling and is not
 pinned here (`TestNullModeLinkWithAFlowShapedTargetIsUnruled`).
+
+## Round trip
+
+Each file decoded and then encoded canonically. Go's
+`TestVectorRoundTrip` reads this table, and every port runs the same
+check, comparing SHA-512 of the bytes:
+
+- `itself`: the output is the file, byte for byte.
+- A file name: the output is that file, byte for byte.
+- `ID in` a file: a chain; the resolved state has that C4 ID.
+- `refused`: decoding fails.
+- `unpaired`: it decodes; no file holds its canonical form, for the reason given.
+
+| File            | Re-encodes to   |
+| --------------- | --------------- |
+| `canonical.c4m` | itself          |
+| `patch.c4m`     | itself          |
+| `pretty.c4m`    | `canonical.c4m` |
