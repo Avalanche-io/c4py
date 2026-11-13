@@ -2,16 +2,21 @@
 
 ## Unreleased (1.1)
 
-### ⚠ Range data kept on re-encode
+### ⚠ Range data kept on re-encode and through patch sections
 
 data loss fixed: re-encoded c4m files kept no range data; they now keep it,
 so their bytes and byte IDs match the input. Range data is a folded
 sequence's member ID lists, the inline lines after the entries. The decoder
 kept them; the encoder dropped them. It now writes them after the entries,
-sorted by C4 ID, as the Go encoder's `Encoder.Encode` does. Root and
-description IDs do not change: range data is not part of either. Found by
-the sequence-null-size vector (decided 2026-11-13 by the release lead;
-reversible).
+sorted by C4 ID, as the Go encoder's `Encoder.Encode` does. Patch sections
+too: `apply_patch` returned a manifest with no range data, the decoder's
+patch step ignored a patch section's, and `resolve_chain` rebuilt from
+entries alone. Each now keeps the base's range data merged with the
+patch's, the patch's winning on a shared key, as Go's `ApplyPatch`
+(`c4m/operations.go`) does; `apply_patch` also takes the patch as a
+`Manifest` for that. Root and description IDs do not change: range data
+is not part of either. Found by the sequence-null-size vector (decided
+2026-11-13 by the release lead; reversible).
 
 ### A folded sequence's size is null when a frame's size is; every vector round-trips byte for byte
 
@@ -27,7 +32,7 @@ c4 commit 7a6ba94 (#156) as `tests/vectors/sequence-null-size-vector/`,
 and its decode half is tested. A new test decodes and canonically
 re-encodes every vendored vector `.c4m` and compares SHA-512 digests
 (hashlib) as each vector README's `## Round trip` table states (c4 #158
-at 9c42890, whose READMEs and canonical partner files are re-vendored): a
+at 7cdc9f3, whose READMEs and canonical partner files are re-vendored): a
 file re-encodes to itself or to its library-written canonical partner's
 exact bytes, a chain resolves to the stated ID, and a damaged file is
 refused; there is no other kind of row. Every vendored `.c4m` must be
