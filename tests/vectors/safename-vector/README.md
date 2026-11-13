@@ -76,8 +76,16 @@ check, comparing SHA-512 of the bytes:
 - A file name: the output is that file, byte for byte.
 - `ID in` a file: a chain; the resolved state has that C4 ID.
 - `refused`: decoding fails.
-- `unpaired`: it decodes; no file holds its canonical form, for the reason given.
+
+A file that is not canonical by design re-encodes to a canonical partner
+the library wrote; `C4M_UPDATE_VECTORS=1 go test ./c4m -run
+TestVectorRoundTrip` rewrites the partners.
 
 | File        | Re-encodes to |
 | ----------- | ------------- |
 | `names.c4m` | itself        |
+
+`names.c4m` holds names that are not valid UTF-8. c4ts and c4m-swift
+refuse it on decode, as stated above, for 1.x. Their round-trip tests
+assert that refusal for this one file, naming the first such line, and
+check that every other line round-trips byte for byte.
