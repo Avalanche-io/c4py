@@ -2,7 +2,18 @@
 
 ## Unreleased (1.1)
 
-### ⚠ A folded sequence's size is null when a frame's size is; the encoder keeps range data
+### ⚠ Range data kept on re-encode
+
+data loss fixed: re-encoded c4m files kept no range data; they now keep it,
+so their bytes and byte IDs match the input. Range data is a folded
+sequence's member ID lists, the inline lines after the entries. The decoder
+kept them; the encoder dropped them. It now writes them after the entries,
+sorted by C4 ID, as the Go encoder's `Encoder.Encode` does. Root and
+description IDs do not change: range data is not part of either. Found by
+the sequence-null-size vector (decided 2026-11-13 by the release lead;
+reversible).
+
+### A folded sequence's size is null when a frame's size is; every vector round-trips byte for byte
 
 Ruled 2026-11-13: "One cannot use size as an expectation if there are
 nulls present, so we must say nothing." A folded sequence (a range like
@@ -10,15 +21,17 @@ nulls present, so we must say nothing." A folded sequence (a range like
 is null if any frame's size is null (`-`, or a `0` beside a C4 ID other
 than the empty content's), as a null child does a directory's (c4 core
 PR #155; decided 2026-11-13 by the release lead; reversible). c4py does
-not fold sequences, so no description ID it computes changes; it already
-decoded a range's `-` size as null. The shared
-`tests/vectors/sequence-null-size-vector/` (c4 core PR #156) is vendored
-and its decode half tested. That test found that the encoder dropped a
-c4m's inline range data (a folded sequence's member ID lists): it now
-writes them after the entries, sorted by C4 ID, as the Go encoder does,
-so `folded.c4m` re-encodes byte for byte. **The bytes, and so the byte
-ID, of a c4m c4py re-encodes change** when it carries range data; its
-description ID does not. CI's c4 CLI pin moves from 5ee54b6 to b17c393.
+not fold sequences, so no C4 ID it computes changes, and it already
+decoded a range's `-` size as null. The shared vector is vendored from
+c4 commit 7a6ba94 (#156) as `tests/vectors/sequence-null-size-vector/`,
+and its decode half is tested. A new test decodes and canonically
+re-encodes every vendored vector `.c4m` and compares SHA-512 digests
+(hashlib). Files the library wrote canonically must match; files that
+are not canonical by design (pretty form, a null size spelled `0`, the
+legacy ten-dash null, patch chains, a 3-space indent) are named with
+their reason; files refused on decode are named too. The classification
+matches the Go reference's measurement on 7a6ba94. CI's c4 CLI pin moves
+from 5ee54b6 to b17c393.
 
 ### CI fails on a test skip the allow-list does not name
 

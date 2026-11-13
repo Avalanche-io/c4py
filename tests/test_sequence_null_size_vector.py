@@ -14,7 +14,7 @@ for the day c4py folds.
 
 The fixtures under ``tests/vectors/sequence-null-size-vector/`` are
 byte-identical copies of the Go reference repo's
-``c4m/testdata/sequence-null-size-vector/``.
+``c4m/testdata/sequence-null-size-vector/`` at c4 commit 7a6ba94 (#156).
 """
 
 from __future__ import annotations
