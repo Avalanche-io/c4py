@@ -84,9 +84,18 @@ def dumps(manifest: Manifest, *, pretty: bool = False) -> str:
 
     indent_width = 2
 
+    # A first-line bare ID is the external base this description refines
+    # (SPECIFICATION.md, external base reference). The decoder keeps it in
+    # ``base``; writing it back keeps the round trip honest. Through
+    # 2026-11-13 it was dropped, so encoding a decoded block turned it into
+    # a standalone description of its own entries (c4 core PR #145).
+    head: list[str] = []
+    if m.base is not None and not m.base.is_nil():
+        head = [str(m.base), "\n"]
+
     if not pretty:
         # Canonical mode
-        lines: list[str] = []
+        lines: list[str] = list(head)
         for entry in m.entries:
             lines.append(entry.format(indent_width, pretty=False))
             lines.append("\n")
@@ -102,7 +111,7 @@ def dumps(manifest: Manifest, *, pretty: bool = False) -> str:
     # Calculate C4 ID column
     c4id_column = _calculate_c4id_column(m, indent_width, max_size)
 
-    lines = []
+    lines = list(head)
     for entry in m.entries:
         line = _format_entry_pretty(entry, indent_width, max_size, c4id_column)
         lines.append(line)

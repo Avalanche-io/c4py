@@ -2,6 +2,18 @@
 
 ## Unreleased (1.1)
 
+### Encoding a description keeps its external base
+
+`dumps` and `dump` never wrote a manifest's `base`, the first-line bare
+C4 ID naming the block a description refines, although `loads` keeps it.
+So `loads` then `dumps` turned a block on a base into a standalone
+description of the block's own entries, silently (found 2026-11-13 in c4
+core, PR #145). Canonical and pretty encoding now write a set base as the
+first line. A manifest with no base encodes exactly as before, and the
+description ID (`compute_c4id`) is unchanged. `patch_diff` already writes
+its own first line (the old state's ID) and never writes either input's
+base.
+
 ### ⚠ Breaking: a c4m file that ends with a bare C4 ID is refused
 
 A c4m file never ends with its own ID (ruled 2026-11-08). A bare C4 ID is
