@@ -32,6 +32,8 @@ print(f"+{len(diff.added)} -{len(diff.removed)} ~{len(diff.modified)}")
 pip install c4py
 ```
 
+Tested on Linux and macOS with Python 3.10 to 3.13. Not tested on Windows.
+
 ## What is C4?
 
 C4 IDs are universally unique, unforgeable identifiers derived from content using SHA-512. They are standardized as [SMPTE ST 2114:2017](https://ieeexplore.ieee.org/document/7971777). Same content always produces the same 90-character ID, regardless of filename, location, or time.
