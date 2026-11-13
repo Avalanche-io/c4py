@@ -26,11 +26,12 @@ decoded a range's `-` size as null. The shared vector is vendored from
 c4 commit 7a6ba94 (#156) as `tests/vectors/sequence-null-size-vector/`,
 and its decode half is tested. A new test decodes and canonically
 re-encodes every vendored vector `.c4m` and compares SHA-512 digests
-(hashlib) as each vector README's `## Round trip` table states (c4
-commit 770ca07, #158, whose READMEs are re-vendored): a file re-encodes
-to itself or to its canonical partner's exact bytes, a chain resolves to
-the stated ID, a damaged file is refused, and an unpaired file says why.
-Every vendored `.c4m` must be named exactly once. CI's c4 CLI pin moves
+(hashlib) as each vector README's `## Round trip` table states (c4 #158
+at 9c42890, whose READMEs and canonical partner files are re-vendored): a
+file re-encodes to itself or to its library-written canonical partner's
+exact bytes, a chain resolves to the stated ID, and a damaged file is
+refused; there is no other kind of row. Every vendored `.c4m` must be
+named exactly once. CI's c4 CLI pin moves
 from 5ee54b6 to b17c393.
 
 ### CI fails on a test skip the allow-list does not name

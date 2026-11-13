@@ -6,9 +6,8 @@ nothing compared bytes, and the encoder dropped a c4m's inline range data
 unseen (sequence-null-size vector; decided 2026-11-13 by the release lead;
 reversible).
 
-Each vendored vector README carries a ``## Round trip`` table (c4 commit
-770ca07, #158), which Go's ``TestVectorRoundTrip`` reads and every port
-runs. This test parses the same table; it hardcodes no classification.
+Each vendored vector README carries a ``## Round trip`` table (c4 #158 at
+9c42890), which Go's ``TestVectorRoundTrip`` reads and every port runs. This test parses the same table; it hardcodes no classification.
 Each ``.c4m`` file is decoded and encoded canonically, and SHA-512 digests
 from ``hashlib`` (never c4py's own C4 ID code) are compared. The second
 cell of a row is one of:
@@ -16,8 +15,12 @@ cell of a row is one of:
 - ``itself``: the output is the file, byte for byte;
 - a backticked file: the output is that file (its canonical partner);
 - ``ID in`` a backticked file: a chain whose resolved state has that C4 ID;
-- ``refused``: decoding fails;
-- ``unpaired: <why>``: it decodes, and there is no byte check.
+- ``refused``: decoding fails.
+
+There is no other kind of row; any other entry fails. A file that is not
+canonical by design (pretty form, a null size spelled ``0``, a legacy
+ten-dash null, a 3-space indent) has a canonical partner the library wrote,
+and must re-encode to that partner's exact bytes.
 
 Every vendored ``.c4m`` must be named exactly once (a glob row counts). A
 row naming a file c4py does not vendor is ignored.
@@ -110,8 +113,6 @@ def test_round_trip(rel, want):
 
     if want == "itself":
         assert _sha512(out) == _sha512(data), f"{rel} does not re-encode to itself"
-    elif want.startswith("unpaired:"):
-        assert want.removeprefix("unpaired:").strip(), f"{rel}: unpaired without a reason"
     elif want.startswith("ID in "):
         expected = (path.parent / _quoted(want)).read_text().strip()
         assert str(m.compute_c4id()) == expected
