@@ -26,10 +26,11 @@ jobs:
       # The Go c4 CLI that test_matches_go_cli_byte_for_byte compares
       # against. Pinned to a c4 commit: the pin moves deliberately, when
       # core changes its output or IDs, and that test then shows whether
-      # c4py still matches.
-      - name: Install the c4 CLI (c4 5ee54b6)
+      # c4py still matches. At b17c393 since 2026-11-13: c4 #155 made a
+      # folded sequence's size null when a frame's size is null.
+      - name: Install the c4 CLI (c4 b17c393)
         run: |
-          go install github.com/Avalanche-io/c4/cmd/c4@5ee54b6
+          go install github.com/Avalanche-io/c4/cmd/c4@b17c393
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
           echo "C4_BIN=$(go env GOPATH)/bin/c4" >> "$GITHUB_ENV"
       - run: pip install -e ".[dev]"
