@@ -48,8 +48,15 @@ def test_a_tree_holding_invalid_utf8_names_is_identified_and_round_trips() -> No
     assert back.compute_c4id() == m.compute_c4id()
 
 
-@pytest.mark.skip(reason="held: which code points Tier 1 passes (Go's unicode.IsPrint, and at which Unicode "
-                          "version) is with Joshua; c4py passes the non-ASCII Zs spaces raw today")
+def test_vector_root_id_and_canonical_text() -> None:
+    text = (VECTOR / "names.c4m").read_text(encoding="utf-8")
+    m = loads(text)
+    assert str(m.compute_c4id()) == (VECTOR / "root-id.txt").read_text(encoding="ascii").strip()
+    assert dumps(m) == text
+
+
 def test_every_name_is_written_as_go_writes_it() -> None:
+    # Held until 2026-11-13: Tier 1 asked unicodedata, which passed the
+    # non-ASCII Zs spaces raw. It is now the pinned Unicode 17.0.0 table.
     for label, (raw, field) in _cases().items():
         assert format_name(raw.decode("utf-8", "surrogateescape")) == field, label

@@ -2,6 +2,25 @@
 
 ## Unreleased (1.1)
 
+### ⚠ SafeName's printable test is pinned to Unicode 17.0.0
+
+SafeName writes a character as itself (Tier 1) when it is printable. c4py
+decided that with `unicodedata`, which follows the interpreter's Unicode
+(13.0 on Python 3.10, 14.0 on 3.11, 15.1 on 3.13), and it counted every
+`Zs` space separator as printable where Go's `unicode.IsPrint` admits only
+U+0020. So U+0870 (assigned in Unicode 14.0) was escaped on Python 3.10 and
+written plainly on 3.11+, and U+00A0 and the other non-ASCII spaces were
+written plainly where every other implementation escapes them: one name,
+two encodings, two C4 IDs. The test is now one table pinned to Unicode
+17.0.0, `tests/vectors/safename-vector/printable-17.0.0.txt` (shared with
+c4 core, PR #149), embedded as `c4py/_printable.py` by
+`scripts/gen_printable.py` and searched by bisection; `unicodedata` is no
+longer used (decided 2026-11-13 by the release lead; reversible). **C4 IDs
+change** for a name holding a code point whose class differed between the
+interpreter's Unicode and 17.0.0, and for a name holding a non-ASCII space
+separator, on every Python. The shared safename vector's last held case
+now passes.
+
 ### Encoding a description keeps its external base
 
 `dumps` and `dump` never wrote a manifest's `base`, the first-line bare

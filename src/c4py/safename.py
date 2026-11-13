@@ -16,22 +16,36 @@ Reference: github.com/Avalanche-io/c4/c4m/safename.go
 
 from __future__ import annotations
 
-import unicodedata
+from bisect import bisect_right
+
+from ._printable import PRINTABLE_RANGES
 
 # Currency sign used as Tier 3 delimiter
 _CURRENCY = "\u00a4"  # ¤
 
 
-def _is_printable(r: str) -> bool:
-    """Check if a character is printable (matching Go's unicode.IsPrint).
+# Range starts, for the binary search in _is_printable.
+_PRINTABLE_LOS = tuple(lo for lo, _ in PRINTABLE_RANGES)
 
-    Go's unicode.IsPrint returns true for graphic characters and spaces
-    (categories L, M, N, P, S, Zs), but false for control characters
-    and other non-graphic categories.
+
+def _is_printable(r: str) -> bool:
+    """True if SafeName writes the character as itself (Tier 1).
+
+    This is Go's unicode.IsPrint pinned to Unicode 17.0.0: a letter, mark,
+    number, punctuation or symbol, or U+0020 SPACE (no other space
+    separator). The answer comes from one table (PRINTABLE_RANGES, generated
+    by scripts/gen_printable.py from the shared
+    tests/vectors/safename-vector/printable-17.0.0.txt), never from the
+    runtime's unicodedata, so a name's encoding, and so its C4 ID, is the
+    same on every Python. Through 2026-11-13 it asked unicodedata, which
+    follows the interpreter (Unicode 13.0 on Python 3.10, 14.0 on 3.11,
+    15.1 on 3.13), and counted every Zs space separator, such as U+00A0, as
+    printable where Go does not (decided 2026-11-13 by the release lead;
+    reversible; c4 core PR #149).
     """
-    cat = unicodedata.category(r)
-    # L=letter, M=mark, N=number, P=punctuation, S=symbol, Zs=space separator
-    return cat[0] in ("L", "M", "N", "P", "S") or cat == "Zs"
+    cp = ord(r)
+    i = bisect_right(_PRINTABLE_LOS, cp) - 1
+    return i >= 0 and cp <= PRINTABLE_RANGES[i][1]
 
 
 def _tier2_escape(ch: str) -> str | None:
