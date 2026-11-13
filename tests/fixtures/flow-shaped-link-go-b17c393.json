@@ -1,0 +1,74 @@
+[
+  {
+    "target": "host:path",
+    "with_id": false,
+    "mode": "lrwxrwxrwx",
+    "text": "lrwxrwxrwx - - link -\u003e host:path -\n"
+  },
+  {
+    "target": "host:path",
+    "with_id": false,
+    "mode": "-",
+    "text": "- - - link -\u003e host:path -\n"
+  },
+  {
+    "target": "host:path",
+    "with_id": true,
+    "mode": "lrwxrwxrwx",
+    "text": "lrwxrwxrwx - - link -\u003e host:path c45WurN5j5WeFqxZMB8ZY9p4D2Ks9rNTEmbXFihjWmCJjDM66pNmRYvW41hGt1Bzj8iJ8WsqyXwNmH7VAJSjvwV91v\n"
+  },
+  {
+    "target": "host:path",
+    "with_id": true,
+    "mode": "-",
+    "text": "- - - link -\u003e host:path c45WurN5j5WeFqxZMB8ZY9p4D2Ks9rNTEmbXFihjWmCJjDM66pNmRYvW41hGt1Bzj8iJ8WsqyXwNmH7VAJSjvwV91v\n"
+  },
+  {
+    "target": "C:foo",
+    "with_id": false,
+    "mode": "lrwxrwxrwx",
+    "text": "lrwxrwxrwx - - link -\u003e C:foo -\n"
+  },
+  {
+    "target": "C:foo",
+    "with_id": false,
+    "mode": "-",
+    "text": "- - - link -\u003e C:foo -\n"
+  },
+  {
+    "target": "C:foo",
+    "with_id": true,
+    "mode": "lrwxrwxrwx",
+    "text": "lrwxrwxrwx - - link -\u003e C:foo c45WurN5j5WeFqxZMB8ZY9p4D2Ks9rNTEmbXFihjWmCJjDM66pNmRYvW41hGt1Bzj8iJ8WsqyXwNmH7VAJSjvwV91v\n"
+  },
+  {
+    "target": "C:foo",
+    "with_id": true,
+    "mode": "-",
+    "text": "- - - link -\u003e C:foo c45WurN5j5WeFqxZMB8ZY9p4D2Ks9rNTEmbXFihjWmCJjDM66pNmRYvW41hGt1Bzj8iJ8WsqyXwNmH7VAJSjvwV91v\n"
+  },
+  {
+    "target": "studio:inbox/",
+    "with_id": false,
+    "mode": "lrwxrwxrwx",
+    "text": "lrwxrwxrwx - - link -\u003e studio:inbox/ -\n"
+  },
+  {
+    "target": "studio:inbox/",
+    "with_id": false,
+    "mode": "-",
+    "text": "- - - link -\u003e studio:inbox/ -\n"
+  },
+  {
+    "target": "studio:inbox/",
+    "with_id": true,
+    "mode": "lrwxrwxrwx",
+    "text": "lrwxrwxrwx - - link -\u003e studio:inbox/ c45WurN5j5WeFqxZMB8ZY9p4D2Ks9rNTEmbXFihjWmCJjDM66pNmRYvW41hGt1Bzj8iJ8WsqyXwNmH7VAJSjvwV91v\n"
+  },
+  {
+    "target": "studio:inbox/",
+    "with_id": true,
+    "mode": "-",
+    "text": "- - - link -\u003e studio:inbox/ c45WurN5j5WeFqxZMB8ZY9p4D2Ks9rNTEmbXFihjWmCJjDM66pNmRYvW41hGt1Bzj8iJ8WsqyXwNmH7VAJSjvwV91v\n"
+  }
+]
