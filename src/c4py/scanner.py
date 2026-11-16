@@ -91,6 +91,19 @@ def _clean_abs(path: str | Path) -> str:
     return p
 
 
+def _mtime(st: os.stat_result) -> datetime:
+    """A stat's mtime at the format's resolution: whole seconds, floored.
+
+    A c4m line carries whole seconds, and Go's encoder writes a time's
+    second, dropping the fraction. Converting the float ``st_mtime``
+    instead rounds to the microsecond, so an mtime in a second's last half
+    microsecond became the next second and the tree's C4 IDs differed from
+    Go's; and keeping the fraction made two scans of an unchanged file
+    compare unequal below the second (subsecond-vector, 2026-11-16).
+    """
+    return datetime.fromtimestamp(st.st_mtime_ns // 1_000_000_000, tz=timezone.utc)
+
+
 def _scan(
     path: str | Path,
     *,
@@ -180,7 +193,7 @@ def _scan(
             entry = Entry(
                 name=fname,
                 mode=normalize_mode(file_mode),
-                timestamp=datetime.fromtimestamp(fstat.st_mtime, tz=timezone.utc),
+                timestamp=_mtime(fstat),
                 size=fstat.st_size,
                 depth=depth,
             )
@@ -230,7 +243,7 @@ def _scan(
             entry = Entry(
                 name=dname + "/",
                 mode=normalize_mode(dir_mode),
-                timestamp=datetime.fromtimestamp(dstat.st_mtime, tz=timezone.utc),
+                timestamp=_mtime(dstat),
                 size=-1,  # will be computed bottom-up
                 depth=depth,
             )
@@ -310,7 +323,7 @@ def _make_symlink_entry(
     entry = Entry(
         name=name,
         mode=normalize_mode(fstat.st_mode),
-        timestamp=datetime.fromtimestamp(fstat.st_mtime, tz=timezone.utc),
+        timestamp=_mtime(fstat),
         size=fstat.st_size,
         depth=depth,
         target=target,
