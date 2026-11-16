@@ -2,6 +2,22 @@
 
 ## Unreleased (1.1)
 
+### ⚠ FSStore finds an object a split left a level too high
+
+data loss fixed: `FSStore.has`, `get` and `put` looked only at the
+deepest shard directory that exists, so an object above it read as
+absent. A split in another process leaves objects there (a writer that
+resolved its target before the split renames into the old level), as does
+a split cut short by a crash. Measured: in a store Go had split, with one
+object one level up, `has` returned False. A lookup that misses at the
+deepest path now searches from the root down, looking for the file at
+every level before descending and through each segment's case variants:
+core's rule (Go's `locate` and `foldFind`, c4 #171,
+`design/store-split-race.md`). `put` of bytes already stored at any level
+no longer writes a second copy. The layout is unchanged: c4py and Go read
+each other's stores, split or not, as before. Tested by the shared
+split-race-store fixture, vendored from c4 0893c90.
+
 ### ⚠ Scan and diff work at the format's resolution: whole seconds
 
 **C4 IDs change.** `scan` took a file's time from the float `st_mtime`
