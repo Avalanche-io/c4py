@@ -15,6 +15,9 @@ Storage layout uses adaptive trie sharding (matching Go store.TreeStore):
       (contain 2-char subdirectories). Never both.
     - When a leaf exceeds SPLIT_THRESHOLD files, it splits into 2-char subdirs
     - Path resolution walks the trie: follow 2-char prefixes until reaching a leaf
+    - A lookup that misses there searches from the root down, looking for the
+      file at every level before descending, so an object a split in another
+      process (or a split cut short) left a level up is still found
     - Small stores stay flat, large stores grow depth only where needed
 
 Reference: github.com/Avalanche-io/c4/store/treestore.go
@@ -24,6 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -94,13 +98,12 @@ class FSStore(Store):
         self.split_threshold = split_threshold
 
     def has(self, c4id: C4ID) -> bool:
-        path = self._resolve_path(c4id)
-        return path.exists()
+        return self._locate(c4id) is not None
 
     def get(self, c4id: C4ID) -> BinaryIO:
         """Retrieve content by C4 ID. The caller must close the returned stream."""
-        path = self._resolve_path(c4id)
-        if not path.exists():
+        path = self._locate(c4id)
+        if path is None:
             raise ContentNotFound(c4id)
         return open(path, "rb")
 
@@ -125,6 +128,12 @@ class FSStore(Store):
                 os.fsync(tmp.fileno())
 
             c4id = C4ID(h.digest())
+
+            # Already stored, at any level: skip the rename, as Go does, so
+            # an object never gets a second copy at a deeper place.
+            if self._locate(c4id) is not None:
+                os.unlink(tmp_path)
+                return c4id
 
             # Atomic rename (same filesystem). Content-addressed = idempotent.
             dest = self._resolve_path(c4id)
@@ -163,6 +172,58 @@ class FSStore(Store):
 
         return directory / s
 
+    def _locate(self, c4id: C4ID) -> Path | None:
+        """The path of the object file for *c4id*, or None if absent.
+
+        Core's lookup rule (``locate`` and ``foldFind`` in Go's
+        store/treestore.go; c4 design/store-split-race.md): first the
+        deepest path, one stat; on a miss, a search from the root down
+        that looks for the file at every level before descending.
+
+        Every level, because a split moves a leaf's files one level down
+        one rename at a time, after making the subdirectories, and another
+        process may be splitting right now; a writer that resolved its
+        target before another process's split lands one level up for good,
+        as does every file a split cut short by a crash had not moved.
+        Through 2026-11-16 c4py looked only at the deepest path, so those
+        objects read as absent. A file only ever moves deeper and shard
+        directories are never removed, so looking top down finds every
+        file that exists, with no lock across processes.
+
+        Each level also tries the segment's case variants: C4 IDs are
+        case-sensitive base58, but a store built on a case-insensitive
+        filesystem files IDs differing only in case under one shard
+        directory named by whichever came first ("c4/1J" holding
+        "c41j..."), which a case-sensitive filesystem then misses.
+        """
+        p = self._resolve_path(c4id)
+        if p.is_file():
+            return p
+        return self._fold_search(self.root, str(c4id), 0)
+
+    def _fold_search(self, directory: Path, s: str, i: int) -> Path | None:
+        # The file at this level first, then the levels below: the order
+        # the files move in (see _locate).
+        here = directory / s
+        if here.is_file():
+            return here
+        if i + 2 > len(s):
+            return None
+        seen: list[os.stat_result] = []
+        for seg in _fold_variants(s[i:i + 2]):
+            sub = directory / seg
+            try:
+                st = sub.stat()
+            except OSError:
+                continue
+            if not stat.S_ISDIR(st.st_mode) or any(os.path.samestat(st, o) for o in seen):
+                continue
+            seen.append(st)
+            found = self._fold_search(sub, s, i + 2)
+            if found is not None:
+                return found
+        return None
+
     def _maybe_split(self, directory: Path) -> None:
         """Split a leaf directory if it exceeds the threshold.
 
@@ -191,6 +252,17 @@ class FSStore(Store):
             subdir = directory / subdir_name
             subdir.mkdir(exist_ok=True)
             os.replace(str(f), str(subdir / name))
+
+
+def _fold_variants(seg: str) -> list[str]:
+    """Every ASCII case variant of *seg*, *seg* itself first (Go's
+    ``foldVariants``)."""
+    out = [seg]
+    for i, c in enumerate(seg):
+        if not c.isascii() or not c.isalpha():
+            continue
+        out += [v[:i] + v[i].swapcase() + v[i + 1:] for v in out]
+    return out
 
 
 def open_store(path: str | Path | None = None) -> FSStore:
