@@ -1,8 +1,10 @@
 """A patch keeps range data: a chain's ID lists survive decode and re-encode.
 
 Range data is a folded sequence's member ID list, an inline line after the
-entries. Go's ``ApplyPatch`` (``c4m/operations.go``) merges the base's and
-the patch's ``RangeData`` into the result. Through 2026-11-13 c4py's
+entries. Go's ``ApplyPatch`` (``c4m/operations.go``) gives the result the
+lists, from the base's and the patch's ``RangeData``, of the ranges it holds
+(c4 #159; a removed range's list goes with it, tested by the range-data
+vector in ``test_range_data_vector.py``). Through 2026-11-13 c4py's
 ``apply_patch`` kept neither, and the decoder's ``_apply_patch`` ignored a
 patch section's (decided 2026-11-13 by the release lead; reversible).
 
