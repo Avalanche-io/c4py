@@ -2,6 +2,49 @@
 
 ## Unreleased (1.1)
 
+### ⚠ A range's ID list goes with its range through merge, diff, patch and filter
+
+data loss fixed: `merge`, `patch_diff` and `Manifest.filter` wrote no ID
+list for any folded range they output, so the frames' C4 IDs were gone
+from the result; they now carry the list of every range they output.
+correctness fixed: `apply_patch`, the decoder's patch step and
+`resolve_chain` kept the list of a range the patch removed; a removed
+range now takes its list with it. The rule follows c4 core #159 (Go's
+`rangeDataFor`, `c4m/rangedata.go`), ported as `range_data_for` in
+`c4py.manifest`: an output carries the ID list of every range it holds,
+from whichever input carried it, and no list for a range it does not
+hold; a list no input carries stays absent. `patch_diff` writes the
+lists of the ranges it adds or changes after its entries, as `c4 diff`
+does; a removal line takes none. Ruled 2026-11-13 by the maintainer: "A
+frame id list is a part of the c4m format, and is the same thing as a
+subdirectory being referenced by it's ID on a parents directory line."
+The lists are part of no description ID, so no C4 ID c4py computes
+changes; the bytes, and so the byte ID, of a merged, diffed, patched or
+filtered c4m holding a range do. Tested by the shared range-data vector,
+vendored from c4 b82ec07.
+
+### ⚠ Vectors re-vendored: a folded range's size counts its ID list
+
+Ruled 2026-11-13 by the maintainer: "The size is the size of every frame
+and the frame id list." A range's size is its frames' bytes plus
+count × 90, its list's bytes (c4 core #161). **The C4 IDs of the
+directories holding folded ranges, and of every directory above them,
+change** wherever core folds: a range line's size feeds its directory's
+listing and so its ID. A range's own C4 ID, its list's ID, does not
+change (measured: the vector's plate line keeps its ID, only its size
+moves from 24 to 384).
+c4py does not fold sequences and has no expander, so no C4 ID c4py
+computes for a given c4m changes: it reads a range's size as stated, and
+its normaliser already derived a directory's size over a range child
+from that stated size (446 for the vector's `sub/`, where Go's derived
+175). The sequence-null-size vector is re-vendored from c4 b82ec07 (the
+plate range is now 384, and its root ID changed with it), and the
+sequence-size vector is new, with its decode side and the normaliser's
+derivation tested. A range whose list is not inline stays one folded
+entry; c4py never makes frames from it (c4 #160, no list, no expansion).
+CI's c4 CLI pin stays at b17c393: the comparison test's output is the
+same at b82ec07 (measured; c4py's scanner does not fold).
+
 ### ⚠ Range data kept on re-encode and through patch sections
 
 data loss fixed: re-encoded c4m files kept no range data; they now keep it,
