@@ -33,7 +33,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import BinaryIO
 
-from .id import C4ID
+from .id import C4ID, parse
 
 # Default threshold before a leaf directory splits into 2-char subdirs
 SPLIT_THRESHOLD = 4096
@@ -102,10 +102,19 @@ class FSStore(Store):
 
     def get(self, c4id: C4ID) -> BinaryIO:
         """Retrieve content by C4 ID. The caller must close the returned stream."""
-        path = self._locate(c4id)
-        if path is None:
-            raise ContentNotFound(c4id)
-        return open(path, "rb")
+        # Another process's split can move the file down between finding it
+        # and opening it: search again. Each retry follows a file that moved
+        # deeper, so the bound is reached only if the ID keeps being removed
+        # and stored again (Go's TreeStore.Open, c4 #171).
+        for _ in range(len(str(c4id))):
+            path = self._locate(c4id)
+            if path is None:
+                break
+            try:
+                return open(path, "rb")
+            except FileNotFoundError:
+                continue
+        raise ContentNotFound(c4id)
 
     def put(self, source: BinaryIO) -> C4ID:
         """Store content and return its C4 ID. Atomic: fsync + rename.
@@ -242,9 +251,18 @@ class FSStore(Store):
             return
         depth = len(rel.parts) * 2  # each part is 2 chars of the ID
 
-        # Redistribute content files into 2-char subdirectories
+        # Redistribute content files into 2-char subdirectories. Only
+        # objects move: a file whose name is not a C4 ID (a tool's journal,
+        # a config, a note a person left) stays where it is, as in core
+        # (c4 #171, TestTreeStoreSplitMovesOnlyObjects). Through 2026-11-16
+        # the root's split moved Go's journal to jo/journal, and its lock,
+        # which is on the file, with it.
         for f in files:
             name = f.name
+            try:
+                parse(name)
+            except ValueError:
+                continue
             if len(name) <= depth + 2:
                 continue  # shouldn't happen, but be safe
 

@@ -142,3 +142,44 @@ def test_split_race_fixture_reads_every_object():
         with store.get(parse(c4id)) as f:
             assert f.read() == data
     assert _tree_state(root) == before, "a read wrote to the fixture"
+
+
+def test_split_moves_only_objects(tmp_path: Path):
+    """A split moves files whose names are C4 IDs and nothing else, as
+    core's does (c4 #171): before, the root's split moved Go's journal to
+    jo/journal, a config to co/config and a person's note to RE/."""
+    others = {"journal": b"c4journal\n", "config": b"store=x\n", "README.txt": b"hi\n"}
+    for name, data in others.items():
+        (tmp_path / name).write_bytes(data)
+    store, ids = _split_store(tmp_path)
+    for name, data in others.items():
+        assert (tmp_path / name).read_bytes() == data, name
+    for seg in ("jo", "co", "RE"):
+        assert not (tmp_path / seg).exists(), seg
+    assert all(store.has(i) for i in ids)
+    assert not [p for p in tmp_path.iterdir() if p.is_file() and p.name.startswith("c4")]
+
+
+def test_get_follows_a_file_moved_down_after_it_was_found(tmp_path: Path, monkeypatch):
+    """Another process's split can move the file between the lookup and the
+    open; get searches again (Go's TreeStore.Open)."""
+    store, ids = _split_store(tmp_path)
+    c4id = ids[0]
+    found = store._locate(c4id)
+    assert found is not None
+    up = tmp_path / "c4" / found.name
+    os.replace(found, up)  # the file is one level up, where a lookup finds it
+    real = FSStore._locate
+    calls = {"n": 0}
+
+    def locate_then_split(self, i):
+        p = real(self, i)
+        calls["n"] += 1
+        if calls["n"] == 1:
+            os.replace(up, found)  # the split moves it down before the open
+        return p
+
+    monkeypatch.setattr(FSStore, "_locate", locate_then_split)
+    with store.get(c4id) as f:
+        assert f.read().startswith(b"obj-")
+    assert calls["n"] == 2
