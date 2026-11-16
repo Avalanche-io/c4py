@@ -14,7 +14,12 @@ deepest path now searches from the root down, looking for the file at
 every level before descending and through each segment's case variants:
 core's rule (Go's `locate` and `foldFind`, c4 #171,
 `design/store-split-race.md`). `put` of bytes already stored at any level
-no longer writes a second copy. The layout is unchanged: c4py and Go read
+no longer writes a second copy, and `get` searches again when a split
+moves the file between finding and opening it. A split now moves only
+files whose names are C4 IDs, as core's does: before, the root's split
+moved any other file there into a two-character directory, so a c4py
+`put` into a store shared with Go moved Go's journal to `jo/journal`
+(measured), and the journal's lock, which is on the file, with it. The layout is unchanged: c4py and Go read
 each other's stores, split or not, as before. Tested by the shared
 split-race-store fixture, vendored from c4 0893c90.
 
