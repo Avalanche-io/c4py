@@ -20,6 +20,20 @@ exactly what their c4m lines carry. **C4 IDs change** for a tree holding
 such a file: they now match the Go CLI's. Tested by the shared
 subsecond-vector, vendored from c4 #173.
 
+### `patch_diff` writes its section in canonical order, as `c4 diff` does
+
+`patch_diff` emitted its entries in sorted path order, so within a
+directory a subdirectory came before its sibling files. A patch section is
+canonical c4m text: "files before directories, then natural sort within
+each group" (SPECIFICATION.md). Core and c4py both read the old order back
+to the same state, but the changeset's bytes, and so its C4 ID, were not
+`c4 diff`'s. The section is now sorted the way every listing is. The shared
+changeset vector (c4 #175, `tests/vectors/changeset-vector/`, vendored byte
+for byte) pins it: given `base.c4m` and `v2.c4m`, `patch_diff` writes
+`changeset.c4m` byte for byte, and `chain.c4m` resolves to `v2.c4m`.
+Measured before the change: the writer row failed (`deep/` before
+`gone.txt` and `new.txt`); every other row passed.
+
 ### ⚠ A range's ID list goes with its range through merge, diff, patch and filter
 
 data loss fixed: `merge`, `patch_diff` and `Manifest.filter` wrote no ID

@@ -236,6 +236,16 @@ def patch_diff(old: Manifest, new: Manifest) -> str:
     if not patch_entries:
         return ""
 
+    # The patch section is canonical c4m text: files before directories,
+    # then natural sort, within each directory (SPECIFICATION.md; the shared
+    # changeset vector, c4 #175). Through 2026-11-16 the entries kept sorted
+    # path order, so a directory came before its sibling files and the
+    # changeset's bytes were not ``c4 diff``'s. The sort keeps the same
+    # Entry objects, so the removal marks above still hold.
+    section = Manifest(patch_entries)
+    section.sort_entries()
+    patch_entries = section.entries
+
     # Build output: base C4 ID line + patch entries, and nothing after them
     lines: list[str] = [str(old_id)]
     for entry in patch_entries:
