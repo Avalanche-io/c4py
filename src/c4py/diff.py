@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from .entry import Entry
 from .id import C4ID
@@ -85,11 +86,21 @@ def _entry_paths(entries: list[Entry]) -> dict[str, Entry]:
     return result
 
 
+def _same_second(a: datetime, b: datetime) -> bool:
+    """Two times are equal at the format's resolution: a c4m line carries
+    whole seconds, so diff and patch compare to the second, as Go's c4m
+    does (``entriesIdentical`` and ``entriesEqual`` in c4m/operations.go).
+    Comparing the fraction put every unchanged entry of a scan into a
+    patch whose line, once encoded, was byte-identical to the base's, and
+    ``c4 patch`` read it as a removal (subsecond-vector, 2026-11-16)."""
+    return a.replace(microsecond=0) == b.replace(microsecond=0)
+
+
 def _entries_equal(a: Entry, b: Entry) -> bool:
     """Compare two entries for equality in diff context.
 
     If both have C4 IDs, compare by C4 ID and mode.
-    Otherwise compare all attributes.
+    Otherwise compare all attributes, timestamps to the second.
     """
     if a.name != b.name:
         return False
@@ -100,7 +111,7 @@ def _entries_equal(a: Entry, b: Entry) -> bool:
     return (
         a.mode == b.mode
         and a.size == b.size
-        and a.timestamp == b.timestamp
+        and _same_second(a.timestamp, b.timestamp)
         and a.target == b.target
     )
 
@@ -113,7 +124,7 @@ def _entries_identical(a: Entry, b: Entry) -> bool:
     return (
         a.name == b.name
         and a.mode == b.mode
-        and a.timestamp == b.timestamp
+        and _same_second(a.timestamp, b.timestamp)
         and a.size == b.size
         and a.c4id == b.c4id
         and a.target == b.target
