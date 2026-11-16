@@ -74,7 +74,11 @@ class Manifest:
             for path, entry in self.flat_entries():
                 if pattern_or_func(path, entry):
                     kept.append(entry)
-        return Manifest(entries=kept)
+        result = Manifest(entries=kept)
+        # The ID lists of the ranges kept, as Go's FilterByPath keeps them;
+        # through 2026-11-13 the filtered manifest carried none.
+        result._range_data = range_data_for(kept, self._range_data)
+        return result
 
     def duplicates(self) -> dict[C4ID, list[str]]:
         """Find entries with the same C4 ID at different paths.
@@ -324,6 +328,39 @@ class Manifest:
         """Deep copy of this manifest."""
         from copy import deepcopy
         return deepcopy(self)
+
+
+def range_data_for(
+    entries: list[Entry],
+    *lists: dict[C4ID, object],
+    skip: Callable[[Entry], bool] | None = None,
+) -> dict[C4ID, object]:
+    """The ID lists, taken from ``lists``, of the ranges among ``entries``.
+
+    One per folded sequence whose list some input carries, and nothing else:
+    a list no input carries stays absent, and none is invented. ``skip``,
+    when given, leaves an entry out (a patch's removal lines name ranges the
+    result does not hold). Lists are keyed by their own C4 ID, so the same
+    key in two inputs is the same list. Every operation that writes a c4m
+    from c4m inputs sets its output's range data with this, so the output
+    carries the list of every range it holds and no list for a range it
+    does not, as a directory's listing goes with the directory. Mirrors Go's
+    ``rangeDataFor`` (``c4m/rangedata.go``, c4 #159). Ruled 2026-11-13 by the
+    maintainer: "A frame id list is a part of the c4m format, and is the
+    same thing as a subdirectory being referenced by it's ID on a parents
+    directory line."
+    """
+    out: dict[C4ID, object] = {}
+    for e in entries:
+        if not e.is_sequence or e.c4id is None or e.c4id.is_nil():
+            continue
+        if skip is not None and skip(e):
+            continue
+        for lst in lists:
+            if e.c4id in lst:
+                out[e.c4id] = lst[e.c4id]
+                break
+    return out
 
 
 def _propagate_metadata(entries: list[Entry]) -> None:

@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 
 from .entry import Entry
 from .id import C4ID
-from .manifest import Manifest
+from .manifest import Manifest, range_data_for
 
 
 @dataclass
@@ -175,6 +175,13 @@ def patch_diff(old: Manifest, new: Manifest) -> str:
     This output can be appended to old.c4m to create a version chain:
         c4 diff before.c4m after.c4m >> before.c4m
 
+    After the entries come the ID lists of the ranges the patch adds or
+    changes, taken from ``new``, one per line sorted by C4 ID, as ``c4 diff``
+    writes them; a removal line names a range the new state does not hold,
+    so it takes none (c4 #159; range-data vector). Through 2026-11-13 the
+    patch carried no lists, so a range it added reached the result with its
+    frames' C4 IDs gone.
+
     Returns:
         c4m patch text (str), starting with the base C4 ID line
     """
@@ -184,6 +191,7 @@ def patch_diff(old: Manifest, new: Manifest) -> str:
     new_map = _entry_paths(new.entries)
 
     patch_entries: list[Entry] = []
+    removals: set[int] = set()  # id() of the removal lines emitted
 
     # Gather all unique paths
     all_paths = sorted(set(list(old_map.keys()) + list(new_map.keys())))
@@ -198,6 +206,7 @@ def patch_diff(old: Manifest, new: Manifest) -> str:
         elif old_entry is not None and new_entry is None:
             # Removal — re-emit old entry (exact duplicate = removal)
             patch_entries.append(old_entry)
+            removals.add(id(old_entry))
         elif old_entry is not None and new_entry is not None:
             if _entries_identical(old_entry, new_entry):
                 # Identical — skip (no change)
@@ -210,6 +219,11 @@ def patch_diff(old: Manifest, new: Manifest) -> str:
     lines: list[str] = [str(old_id)]
     for entry in patch_entries:
         lines.append(entry.format())
+    lists = range_data_for(
+        patch_entries, new._range_data, skip=lambda e: id(e) in removals
+    )
+    for key in sorted(lists, key=str):
+        lines.append(str(lists[key]))
     lines.append("")  # trailing newline
     return "\n".join(lines)
 
@@ -303,12 +317,13 @@ def apply_patch(base: Manifest, patch_entries: list[Entry] | Manifest) -> Manife
     - Same path, different content -> modification (replace entry, recurse for dirs)
     - New path -> addition
 
-    The result keeps the range data (inline ID lists) of the base and, when
-    the patch is given as a Manifest, of the patch too, the patch's winning
-    on a shared key, as Go's ``ApplyPatch`` (``c4m/operations.go``) merges
-    ``RangeData``. Through 2026-11-13 the result kept none, so a sequence's
-    member ID list was lost on every patch (decided 2026-11-13 by the
-    release lead; reversible).
+    The result carries the ID list (inline range data) of every range it
+    holds, from the base or, when the patch is given as a Manifest, the
+    patch, and no list for a range it does not hold: a range the patch
+    removes takes its list with it, as Go's ``ApplyPatch``
+    (``c4m/operations.go``, c4 #159) keeps them. Through 2026-11-13 the
+    result first kept no lists, then every list of base and patch, so a
+    removed range's list outlived it (range-data vector, ``remove-chain``).
 
     Args:
         base: the manifest to patch
@@ -318,7 +333,7 @@ def apply_patch(base: Manifest, patch_entries: list[Entry] | Manifest) -> Manife
     Returns:
         New manifest with patch applied
     """
-    patch_range: dict = {}
+    patch_range: dict[C4ID, object] = {}
     if isinstance(patch_entries, Manifest):
         patch_range = patch_entries._range_data
         patch_entries = patch_entries.entries
@@ -332,7 +347,7 @@ def apply_patch(base: Manifest, patch_entries: list[Entry] | Manifest) -> Manife
 
     result = Manifest(entries=entries)
     result.sort_entries()
-    result._range_data = {**base._range_data, **patch_range}
+    result._range_data = range_data_for(result.entries, base._range_data, patch_range)
     return result
 
 
@@ -354,16 +369,17 @@ def resolve_chain(manifest: Manifest) -> Manifest:
     if not sections or len(sections) <= 1:
         return manifest
 
-    # First section is the base; the manifest's range data (inline ID
-    # lists) carries through every patch, as Go's resolution merges each
-    # layer's RangeData.
+    # First section is the base. The manifest's range data (inline ID
+    # lists) holds every section's lists; the resolved state carries the
+    # lists of the ranges it holds, from whichever section carried them,
+    # as Go's ResolvePatchChain keeps them (c4 #159).
     current = Manifest(entries=list(sections[0]))
-    current._range_data = dict(manifest._range_data)
 
     # Apply subsequent patches
     for i in range(1, len(sections)):
         current = apply_patch(current, list(sections[i]))
 
+    current._range_data = range_data_for(current.entries, manifest._range_data)
     return current
 
 
@@ -659,4 +675,10 @@ def merge(
     _ensure_dirs(merged)
 
     result = _rebuild_manifest(merged)
+    # The ID lists of the ranges the result holds, from whichever input
+    # carried them, as Go's Merge keeps them (c4 #159). _rebuild_manifest
+    # works from entries only; through 2026-11-13 the lists were dropped.
+    result._range_data = range_data_for(
+        result.entries, base._range_data, local._range_data, remote._range_data
+    )
     return result, conflicts
