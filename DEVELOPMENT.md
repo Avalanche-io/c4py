@@ -53,7 +53,7 @@ Key interop points:
    - Split names into alternating text/numeric segments
    - Numeric: compare as integers, then by string length for ties
    - Text sorts before numeric in mixed comparisons
-   - Reference: `/Users/joshua/ws/active/c4/oss/c4/c4m/naturalsort.go`
+   - Reference: Go `c4m/naturalsort.go`
    - Tests: `tests/test_naturalsort.py`
 
 4. **safename.py** — Implement all four functions.
@@ -61,13 +61,13 @@ Key interop points:
    - Tier 2: `\0`, `\t`, `\n`, `\r`, `\\`
    - Tier 3: non-printable → braille U+2800-U+28FF between `¤` delimiters
    - Field escaping: space→`\ `, `"`→`\"`, `[`→`\[`, `]`→`\]`
-   - Reference: `/Users/joshua/ws/active/c4/oss/c4/c4m/safename.go`
+   - Reference: Go `c4m/safename.go`
 
 5. **entry.py** — Complete `format_mode()` and `canonical()`.
    - Mode string: 10 chars, position 0 = file type, 1-9 = rwx with special bits
    - Use Python's `stat` module constants for bit extraction
    - Null mode (0) → `-`
-   - Reference: `/Users/joshua/ws/active/c4/oss/c4/c4m/entry.go`
+   - Reference: Go `c4m/entry.go`
 
 6. **decoder.py** — Implement `loads()` and `load()`.
    - Parse entry lines: split fields, handle indentation
@@ -79,19 +79,19 @@ Key interop points:
    - Skip inline ID list lines (range data): len > 90, len % 90 == 0, all 90-char
      chunks are valid C4 IDs. These are NOT patch boundaries.
    - Bare C4 ID lines (exactly 90 chars) are patch boundaries
-   - Reference: `/Users/joshua/ws/active/c4/oss/c4/c4m/decoder.go`
-   - Reference: `/Users/joshua/ws/active/c4/oss/c4/c4m/chain.go`
+   - Reference: Go `c4m/decoder.go`
+   - Reference: Go `c4m/chain.go`
 
 7. **encoder.py** — Implement `dumps()` and `dump()`.
    - Canonical mode: no indent, single spaces, UTC, null as `-`
    - Pretty mode: indented, padded sizes, column-aligned C4 IDs
    - Pretty column: default 80, shift to next 10-col boundary if needed
-   - Reference: `/Users/joshua/ws/active/c4/oss/c4/c4m/encoder.go`
+   - Reference: Go `c4m/encoder.go`
 
 8. **manifest.py** — Complete `sort_entries()` and `compute_c4id()`.
    - Sort: files before directories at each depth, then natural sort
    - C4 ID: format all entries canonical, hash the UTF-8 bytes
-   - Reference: `/Users/joshua/ws/active/c4/oss/c4/c4m/manifest.go`
+   - Reference: Go `c4m/manifest.go`
 
 9. **scanner.py** — Implement `scan()`.
    - Walk directory with `os.walk()` or `pathlib`
@@ -102,7 +102,7 @@ Key interop points:
    - Record symlink targets
    - Build entry tree with correct depth
    - Sort and compute directory C4 IDs bottom-up
-   - Reference: `/Users/joshua/ws/active/c4/oss/c4/c4m/builder.go`
+   - Reference: Go `c4m/builder.go`
 
 10. **diff.py** — Implement all functions:
     - `diff(a, b)` — high-level comparison: match by path, categorize as
@@ -116,8 +116,7 @@ Key interop points:
       Maps to: `c4 patch project.c4m`
     - `log_chain(manifest)` — enumerate patches with summary stats.
       Maps to: `c4 log project.c4m`
-    - Reference: `/Users/joshua/ws/active/c4/oss/c4/c4m/operations.go`
-    - Reference: `/Users/joshua/ws/active/c4/oss/c4/design/cli/phase1_cli_redesign.md`
+    - Reference: Go `c4m/operations.go`
 
 11. **validator.py** — Implement `validate()`.
     - Check for duplicate paths
@@ -128,7 +127,7 @@ Key interop points:
     - Check C4 ID format (90 chars, c4 prefix, base58)
     - Check directory names end with /
     - Verify bare C4 ID patch boundaries match accumulated content
-    - Reference: `/Users/joshua/ws/active/c4/oss/c4/c4m/validator.go`
+    - Reference: Go `c4m/validator.go`
 
 ### Phase 2: Polish (v0.1.0 nice-to-have)
 
@@ -155,14 +154,14 @@ Test vectors are in `tests/vectors/known_ids.json`, generated from the Go implem
 
 To generate additional test vectors:
 ```bash
-cd /Users/joshua/ws/active/c4/oss/c4
+cd c4  # a checkout of github.com/Avalanche-io/c4
 go run /tmp/c4vectors.go
 ```
 
 ## Running Tests
 
 ```bash
-cd /Users/joshua/ws/active/c4/oss/c4py
+cd c4py
 pip install -e ".[dev]"
 pytest
 pytest --cov=c4py
@@ -190,7 +189,7 @@ ruff check src/ tests/
 
 ## Reference Files
 
-All paths are in the Go reference implementation at `/Users/joshua/ws/active/c4/oss/c4/`:
+All paths are in the Go reference implementation, [github.com/Avalanche-io/c4](https://github.com/Avalanche-io/c4):
 
 | Module | Go Reference |
 |--------|-------------|

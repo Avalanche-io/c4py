@@ -3,7 +3,7 @@
 [![CI](https://github.com/Avalanche-io/c4py/actions/workflows/ci.yml/badge.svg)](https://github.com/Avalanche-io/c4py/actions/workflows/ci.yml)
 [![Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-443-brightgreen.svg)](./tests)
+[![Tests](https://img.shields.io/badge/tests-575-brightgreen.svg)](./tests)
 
 Pure Python implementation of [C4](https://github.com/Avalanche-io/c4) universal content identification (SMPTE ST 2114:2017).
 
@@ -11,10 +11,9 @@ Pure Python implementation of [C4](https://github.com/Avalanche-io/c4) universal
 import c4py
 
 # Verify a delivery matches the manifest
-manifest = c4py.load("delivery-v3.c4m")
-for path, entry in manifest.flat_entries():
-    if entry.c4id and not c4py.verify(f"/deliveries/v3/{path}", entry.c4id):
-        print(f"MISMATCH: {path}")
+report = c4py.verify_tree("delivery-v3.c4m", "/deliveries/v3/")
+for bad in report.corrupt:
+    print(f"MISMATCH: {bad.path}")
 
 # Identify any file — same content always produces the same ID
 c4id = c4py.identify_file("render.1001.exr")
@@ -47,9 +46,9 @@ C4ID('c41yP4cqy7jmaRDzC2bmcGNZkuQb3VdftMk6YH7ynQ2Qw4zktKsyA9fk52xghNQNAdkpF9iFmF
 A **c4m file** is a human-readable text file that describes a filesystem. It captures file names, sizes, permissions, timestamps, and C4 IDs in a format you can read, edit, diff, and email.
 
 ```
--rw-r--r-- 2025-06-15T12:00:00Z      3 README.md   c45xZeXwMSpq...
-drwxr-xr-x 2025-06-15T12:00:00Z      3 src/        -
-  -rw-r--r-- 2025-06-15T12:00:00Z    3 main.go     c45KgBYEvEE7...
+-rw-r--r-- 2025-06-15T12:00:00Z      3 README.md   c45JwjSStebb...
+drwxr-xr-x 2025-06-15T12:00:00Z    136 src/        c45bqBopeQt9...
+  -rw-r--r-- 2025-06-15T12:00:00Z    3 main.go     c43U5CUKjg7Z...
 ```
 
 A 2 KB c4m file can describe an 8 TB project. Compare two c4m files to find exactly which frames changed across a delivery — in seconds, not hours.
@@ -63,7 +62,7 @@ A 2 KB c4m file can describe an 8 TB project. Compare two c4m files to find exac
 c4id = c4py.identify_file("render.1001.exr")
 
 # Verify a file matches an expected ID
-assert c4py.verify("render.1001.exr", expected_id)
+assert c4py.identify_file("render.1001.exr") == expected_id
 
 # From file-like object (streaming, constant memory)
 c4id = c4py.identify(file_obj)
@@ -123,7 +122,8 @@ store = c4py.open_store("/data/c4store")
 # Store and retrieve content
 c4id = store.put(open("render.exr", "rb"))
 assert store.has(c4id)
-content = store.get(c4id)
+with store.get(c4id) as f:  # a binary file object
+    content = f.read()
 
 # Scan + store in one pass (zero extra I/O)
 manifest = c4py.scan("/projects/HERO", store=store)
@@ -142,12 +142,14 @@ diff.same       # identical entries
 # Produce a c4m patch (like `c4 diff before.c4m after.c4m`)
 patch_text = c4py.patch_diff(old_manifest, new_manifest)
 
-# c4m files can contain version histories (base + patches)
-# Resolve a chain to its final state (like `c4 patch project.c4m`)
-final = c4py.resolve_chain(manifest)
+# c4m files can contain version histories (base + patches).
+# load() applies every patch as it reads, so a loaded chain is already its
+# final state (like `c4 patch project.c4m`); resolve_chain returns it as is.
+final = c4py.load("project.c4m")
 
-# Enumerate patches (like `c4 log project.c4m`)
-for info in c4py.log_chain(manifest):
+# load() keeps no sections, so log_chain of a loaded file gives one entry,
+# the final state. For a file's history use `c4 log project.c4m`.
+for info in c4py.log_chain(final):
     print(f"{info.index}  {info.c4id}  +{info.added} -{info.removed} ~{info.modified}")
 ```
 
@@ -177,7 +179,7 @@ Zero external dependencies. Pure Python. Works offline.
 
 ## Design Decisions
 
-See the [FAQ](https://github.com/Avalanche-io/c4/blob/main/docs/faq.md) for design decisions including SHA-512 permanence, the c4m format, and content store scaling.
+See the [FAQ](https://github.com/Avalanche-io/c4/blob/release/1.0.x/docs/faq.md) for design decisions including SHA-512 permanence, the c4m format, and content store scaling.
 
 ## License
 
