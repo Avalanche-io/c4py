@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .decoder import load
-from .entry import NULL_TIMESTAMP, Entry
+from .entry import Entry, is_null_timestamp
 from .id import C4ID, identify_file
 from .manifest import Manifest
 from .store import Store, open_store
@@ -201,7 +201,7 @@ def _execute_plan(
                 mkdir_entry = meta.get(op.path)
                 if mkdir_entry is not None:
                     _apply_dir_meta(full, mkdir_entry)
-                    if mkdir_entry.timestamp != NULL_TIMESTAMP:
+                    if not is_null_timestamp(mkdir_entry.timestamp):
                         dir_timestamps.append((op.path, mkdir_entry.timestamp))
                 result.created += 1
 
@@ -250,7 +250,7 @@ def _execute_plan(
     for rel_path, entry in manifest.flat_entries():
         if not entry.is_dir():
             continue
-        if entry.timestamp == NULL_TIMESTAMP:
+        if is_null_timestamp(entry.timestamp):
             continue
         full = directory / rel_path
         if full.is_dir():
@@ -287,7 +287,7 @@ def _apply_file_meta(path: Path, entry: Entry) -> None:
         except OSError:
             pass
 
-    if entry.timestamp != NULL_TIMESTAMP:
+    if not is_null_timestamp(entry.timestamp):
         epoch = _truncate_to_seconds(entry.timestamp)
         try:
             os.utime(str(path), (epoch, epoch))

@@ -30,31 +30,9 @@ from c4py.entry import Entry
 from c4py.id import identify_bytes
 from c4py.manifest import Manifest
 from c4py.scanner import scan
+from tests.vector_tree import build_tree
 
 VECTOR = Path(__file__).parent / "vectors" / "subsecond-vector"
-
-
-def _build(dest: Path) -> None:
-    """Make the tree tree.txt describes, as the README says: a file's
-    bytes are its base name and a newline; times are set once every entry
-    exists, files first, then directories deepest first."""
-    rows = []
-    for line in (VECTOR / "tree.txt").read_text(encoding="utf-8").splitlines():
-        mode, ns, path = line.split(" ", 2)
-        rows.append((int(mode, 8), int(ns), path))
-    for _, _, path in rows:
-        full = dest / path.rstrip("/")
-        if path.endswith("/"):
-            full.mkdir(parents=True, exist_ok=True)
-        else:
-            full.parent.mkdir(parents=True, exist_ok=True)
-            full.write_bytes(full.name.encode() + b"\n")
-    for mode, ns, path in sorted(
-        rows, key=lambda r: (r[2].endswith("/"), -r[2].count("/"))
-    ):
-        full = dest / path.rstrip("/")
-        os.chmod(full, mode)
-        os.utime(full, ns=(ns, ns))
 
 
 def _entry_lines(patch: str) -> list[str]:
@@ -66,7 +44,7 @@ def _entry_lines(patch: str) -> list[str]:
 def tree(tmp_path: Path) -> Path:
     root = tmp_path / "tree"
     root.mkdir()
-    _build(root)
+    build_tree(VECTOR, root)
     return root
 
 

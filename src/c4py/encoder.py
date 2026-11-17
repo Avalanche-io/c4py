@@ -13,13 +13,13 @@ from datetime import datetime
 from typing import IO
 
 from .entry import (
-    NULL_TIMESTAMP,
     Entry,
     FlowDirection,
     format_mode,
     format_name,
     format_target,
     is_path_name,
+    is_null_timestamp,
 )
 from .manifest import Manifest
 
@@ -169,7 +169,7 @@ def _format_entry_pretty(
         mode_str = format_mode(entry.mode)
 
     # Format timestamp
-    if entry.timestamp == NULL_TIMESTAMP:
+    if is_null_timestamp(entry.timestamp):
         # Null timestamp padded to match typical timestamp width
         time_str = "-                        "
     else:

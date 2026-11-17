@@ -28,6 +28,21 @@ class FlowDirection(Enum):
 # Sentinel for null timestamp (Unix epoch)
 NULL_TIMESTAMP = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
+
+def is_null_timestamp(ts: datetime) -> bool:
+    """Whether *ts* is null at the format's resolution: the second it falls
+    in is the epoch. A c4m line carries the second a time falls in, and the
+    epoch is null (SPECIFICATION.md, "Timestamp": ``-`` or ``0``), so a time
+    inside the epoch second, such as 0.5 s, is null and its line is ``-``.
+    Through 1.0.27 every null test compared the unfloored time with the
+    epoch, so an entry built with such a time was written
+    ``1970-01-01T00:00:00Z``, which reads back as null, and a manifest's C4
+    ID differed from the ID of its own text (core's epoch-second vector,
+    c4 #192). A datetime holds the floored second and a non-negative
+    fraction, so dropping the fraction floors before 1970 too.
+    """
+    return ts.replace(microsecond=0) == NULL_TIMESTAMP
+
 # Sentinel for null size
 NULL_SIZE = -1
 
@@ -99,7 +114,7 @@ class Entry:
         return self.mode == 0
 
     def has_null_timestamp(self) -> bool:
-        return self.timestamp == NULL_TIMESTAMP
+        return is_null_timestamp(self.timestamp)
 
     def has_null_size(self) -> bool:
         return self.size == NULL_SIZE
@@ -353,7 +368,7 @@ def format_timestamp(ts: datetime) -> str:
 
     Returns '-' for null timestamp (Unix epoch).
     """
-    if ts == NULL_TIMESTAMP:
+    if is_null_timestamp(ts):
         return "-"
     utc = ts.astimezone(timezone.utc)
     return utc.strftime("%Y-%m-%dT%H:%M:%SZ")

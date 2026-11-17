@@ -12,7 +12,7 @@ from collections.abc import Callable, Iterator
 from datetime import datetime
 from fnmatch import fnmatch
 
-from .entry import NULL_SIZE, NULL_TIMESTAMP, Entry, _human_size, is_path_name
+from .entry import NULL_SIZE, NULL_TIMESTAMP, Entry, _human_size, is_path_name, is_null_timestamp
 from .id import C4ID
 
 # The C4 ID of an empty listing: the ID of zero bytes (SPECIFICATION.md,
@@ -375,7 +375,7 @@ def _propagate_metadata(entries: list[Entry]) -> None:
             continue
         has_null = (
             (entry.mode == 0 and not entry.is_dir() and not entry.is_symlink())
-            or entry.timestamp == NULL_TIMESTAMP
+            or is_null_timestamp(entry.timestamp)
             or entry.size < 0
         )
         if not has_null:
@@ -386,7 +386,7 @@ def _propagate_metadata(entries: list[Entry]) -> None:
         if entry.size < 0:
             entry.size = _calculate_directory_size(entry, children)
 
-        if entry.timestamp == NULL_TIMESTAMP:
+        if is_null_timestamp(entry.timestamp):
             entry.timestamp = _get_most_recent_modtime(children)
 
 
@@ -452,7 +452,7 @@ def _get_most_recent_modtime(children: list[Entry]) -> datetime:
     """Find most recent modification time. Nil-infectious."""
     most_recent: datetime | None = None
     for e in children:
-        if e.timestamp == NULL_TIMESTAMP:
+        if is_null_timestamp(e.timestamp):
             return NULL_TIMESTAMP
         if most_recent is None or e.timestamp > most_recent:
             most_recent = e.timestamp
