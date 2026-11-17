@@ -9,8 +9,7 @@ self-contained bundle with everything they need.
     python portable_bundle.py pack /projects/HERO/deliveries/v03/ bundle/
 
     # On the receiving end (they need the c4 CLI or c4py, not both)
-    cd bundle/
-    sh extract.sh
+    sh bundle/extract.sh /projects/received/
 
     # Or if they have c4py:
     python portable_bundle.py unpack bundle/ /projects/received/
@@ -45,7 +44,7 @@ def pack(source_dir, output_dir):
     print(f"Bundle created in {output_dir}/")
     print(f"  {result.copied} objects, {result.skipped} already present")
     print(f"  {manifest.summary()}")
-    print(f"\nTo extract without c4py: cd {output_dir} && sh extract.sh")
+    print(f"\nTo extract without c4py: sh {output_dir}/extract.sh <target directory>")
 
 
 def unpack(bundle_dir, dest_dir):
