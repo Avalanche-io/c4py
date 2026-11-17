@@ -4,6 +4,16 @@
 
 ### ⚠ Scan and diff work at the format's resolution: whole seconds
 
+**C4 IDs change.** `scan` took a file's time from the float `st_mtime`
+and `datetime.fromtimestamp` rounded it to the microsecond, so an mtime
+in the last half microsecond of a second was recorded as the next second,
+where Go writes the second it falls in (before 1970 too: an mtime of
+−1.0000003 s became `23:59:59Z`, where Go writes `23:59:58Z`). The same
+ordinary file then gave c4py and Go different C4 IDs, and so did every
+directory above it. `scan` now floors `st_mtime_ns` to whole seconds,
+toward negative infinity, so a scan's entries hold exactly what their c4m
+lines carry, and c4py scan IDs for such files now match the Go CLI's.
+
 data loss fixed: `patch_diff(load(old), scan(dir))`, the documented
 workflow, wrote every unchanged entry of the scan into the patch, because
 the scan kept sub-second times and the loaded c4m holds whole seconds.
@@ -11,14 +21,12 @@ Each such line, once encoded, was byte-identical to the base's, and
 `c4 patch` (and `resolve_chain`) rightly read an identical line as a
 removal, so unchanged files were deleted from the resolved state. `diff`
 and `patch_diff` now compare timestamps to the second, as Go's c4m does
-(`entriesIdentical` and `entriesEqual`, `c4m/operations.go`).
-correctness fixed: `scan` converted the float `st_mtime`, which rounds to
-the microsecond, so an mtime in the last half microsecond of a second was
-recorded as the next second, where Go writes the second it falls in. It
-now floors `st_mtime_ns` to whole seconds, so a scan's entries hold
-exactly what their c4m lines carry. **C4 IDs change** for a tree holding
-such a file: they now match the Go CLI's. Tested by the shared
-subsecond-vector, vendored from c4 #173.
+(`entriesIdentical` and `entriesEqual`, `c4m/operations.go`). Go keeps
+nanoseconds in memory and its own fix was comparison-only; c4py's
+rounding was a separate bug.
+
+Tested by the shared subsecond-vector, pre-1970 rows included, vendored
+from c4 #173.
 
 ### `patch_diff` writes its section in canonical order, as `c4 diff` does
 

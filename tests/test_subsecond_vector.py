@@ -123,3 +123,21 @@ def test_patch_diff_compares_at_the_second():
     assert d.modified == [] and len(d.same) == 1
     d = diff(one(t, with_id=False), one(t.replace(second=41), with_id=False))
     assert len(d.modified) == 1
+
+
+@pytest.mark.parametrize(
+    "ns, want",
+    [
+        (1_750_000_000_999_999_700, "2025-06-15T15:06:40Z"),  # rounds up as a float
+        (-1_500_000_000, "1969-12-31T23:59:58Z"),  # truncating toward zero gives :59
+        (-1_000_000_300, "1969-12-31T23:59:58Z"),  # rounding to the µs gives :59
+        (-999_999_700, "1969-12-31T23:59:59Z"),
+    ],
+)
+def test_scan_time_is_the_floor_of_the_second(tmp_path: Path, ns: int, want: str):
+    """The scan floors st_mtime_ns toward negative infinity, the second Go
+    writes for the same instant (measured with Go release/1.0.27)."""
+    (tmp_path / "f").write_bytes(b"f\n")
+    os.utime(tmp_path / "f", ns=(ns, ns))
+    (e,) = list(scan(tmp_path))
+    assert e.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ") == want
