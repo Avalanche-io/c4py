@@ -75,3 +75,8 @@ python portable_bundle.py pack /projects/HERO/deliveries/v03/ bundle/
 python portable_bundle.py unpack bundle/ /projects/received/
 # or without c4py: cd bundle && sh extract.sh
 ```
+
+Bundles made by c4py 1.0.26 or earlier carry an older `extract.sh` that, run
+with no argument, makes the folder it is run from match the bundle, deleting
+what the bundle's c4m doesn't list. Run those with a new, empty target:
+`sh bundle/extract.sh ./received`.
