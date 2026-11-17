@@ -94,3 +94,18 @@ def test_an_explicit_target_is_used_as_given(tmp_path: Path):
     _assert_bundle_intact(bundle, "delivery.c4m")
     _assert_tree(out)
     assert not (bundle / "delivery").exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="extract.sh is a POSIX shell script")
+def test_a_default_folder_that_holds_files_is_refused(tmp_path: Path):
+    bundle = _bundle(tmp_path, "delivery.c4m")
+    (bundle / "delivery").mkdir()
+    (bundle / "delivery" / "notes.txt").write_text("unrelated")
+
+    r = _run(bundle / "extract.sh", bundle)
+
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "delivery" in r.stderr and "empty target folder" in r.stderr, r.stderr
+    assert (bundle / "delivery" / "notes.txt").read_text() == "unrelated"
+    assert sorted(p.name for p in (bundle / "delivery").iterdir()) == ["notes.txt"]
+    _assert_bundle_intact(bundle, "delivery.c4m")
