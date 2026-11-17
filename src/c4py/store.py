@@ -29,6 +29,7 @@ import hashlib
 import os
 import stat
 import tempfile
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import BinaryIO
@@ -106,14 +107,27 @@ class FSStore(Store):
         # and opening it: search again. Each retry follows a file that moved
         # deeper, so the bound is reached only if the ID keeps being removed
         # and stored again (Go's TreeStore.Open, c4 #171).
+        # On Windows an open can also meet the split's rename itself (a
+        # sharing violation): wait and search again within the same bound,
+        # and if it is still held at the end, raise that, never not-found
+        # (Go's moving, c4 release/1.0.27).
+        held: OSError | None = None
         for _ in range(len(str(c4id))):
             path = self._locate(c4id)
             if path is None:
                 break
             try:
-                return open(path, "rb")
+                return self._open(path)
             except FileNotFoundError:
+                held = None
                 continue
+            except OSError as e:
+                if not _moving(e):
+                    raise
+                held = e
+                time.sleep(_MOVING_PAUSE)
+        if held is not None:
+            raise held
         raise ContentNotFound(c4id)
 
     def put(self, source: BinaryIO) -> C4ID:
@@ -147,14 +161,42 @@ class FSStore(Store):
             # Atomic rename (same filesystem). Content-addressed = idempotent.
             dest = self._resolve_path(c4id)
             dest.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(tmp_path, str(dest))
-            self._maybe_split(dest.parent)
+            if self._publish(tmp_path, dest, c4id):
+                self._maybe_split(dest.parent)
 
             return c4id
         except Exception:
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
             raise
+
+    def _publish(self, tmp_path: str, dest: Path, c4id: C4ID) -> bool:
+        """Rename the complete temp file to the object's name, and report
+        whether this rename published it. The same name means the same
+        bytes, so a rename that fails while the object is now present lost
+        a race to another writer of the same bytes and is not a failure (on
+        Windows a rename onto a name another writer holds is refused; Go's
+        publish, c4 #179)."""
+        try:
+            self._replace(tmp_path, str(dest))
+            return True
+        except OSError:
+            if self._locate(c4id) is None:
+                raise
+            os.unlink(tmp_path)
+            return False
+
+    def _stat(self, path: Path) -> os.stat_result:
+        """Every lookup's stat, a seam for tests."""
+        return os.stat(path)
+
+    def _open(self, path: Path) -> BinaryIO:
+        """Every object open, a seam for tests."""
+        return open(path, "rb")
+
+    def _replace(self, src: str, dst: str) -> None:
+        """The publishing rename, a seam for tests."""
+        os.replace(src, dst)
 
     def _resolve_path(self, c4id: C4ID) -> Path:
         """Walk the adaptive trie to find where this ID lives.
@@ -206,23 +248,29 @@ class FSStore(Store):
         "c41j..."), which a case-sensitive filesystem then misses.
         """
         p = self._resolve_path(c4id)
-        if p.is_file():
+        try:
+            self._stat(p)
             return p
+        except OSError:
+            pass
         return self._fold_search(self.root, str(c4id), 0)
 
     def _fold_search(self, directory: Path, s: str, i: int) -> Path | None:
         # The file at this level first, then the levels below: the order
         # the files move in (see _locate).
         here = directory / s
-        if here.is_file():
+        try:
+            self._stat(here)
             return here
+        except OSError:
+            pass
         if i + 2 > len(s):
             return None
         seen: list[os.stat_result] = []
         for seg in _fold_variants(s[i:i + 2]):
             sub = directory / seg
             try:
-                st = sub.stat()
+                st = self._stat(sub)
             except OSError:
                 continue
             if not stat.S_ISDIR(st.st_mode) or any(os.path.samestat(st, o) for o in seen):
@@ -270,6 +318,17 @@ class FSStore(Store):
             subdir = directory / subdir_name
             subdir.mkdir(exist_ok=True)
             os.replace(str(f), str(subdir / name))
+
+
+# How long get waits before it looks again for a file whose open met a
+# rename in progress (Go's movingPause).
+_MOVING_PAUSE = 0.001
+
+
+def _moving(err: OSError | None) -> bool:
+    """An open that failed because another process's rename holds the file:
+    ERROR_SHARING_VIOLATION, which only Windows produces (Go's moving)."""
+    return err is not None and getattr(err, "winerror", None) == 32
 
 
 def _fold_variants(seg: str) -> list[str]:
