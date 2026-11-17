@@ -2,6 +2,18 @@
 
 ## Unreleased (1.1)
 
+### ⚠ A bundle's extract.sh never empties the folder it is run from (data loss fixed)
+
+Run a bundle's extract.sh with a new, empty target:
+`sh bundle/extract.sh ./received`. In c4py 1.0.0 through 1.0.26, run with
+no argument, it made the folder it's run from match the bundle, deleting
+every file and folder there the bundle's c4m doesn't list, the bundle
+itself included. That held whether the script used the c4 CLI or c4py's own
+reconcile; with the c4 CLI, the revert record went into the bundle's store
+and was deleted with it. Bundles made by those versions keep that script.
+`pool` now writes a script that defaults to a new folder named after the
+c4m, `./<name>`, and refuses one that isn't empty; an explicit target is
+used as given.
 ### ⚠ FSStore finds an object a split left a level too high
 
 data loss fixed: `FSStore.has`, `get` and `put` looked only at the
