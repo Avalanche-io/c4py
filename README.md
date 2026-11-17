@@ -5,7 +5,6 @@ This branch is the 1.1 development line, unreleased; the released 1.0.x docs are
 [![CI](https://github.com/Avalanche-io/c4py/actions/workflows/ci.yml/badge.svg)](https://github.com/Avalanche-io/c4py/actions/workflows/ci.yml)
 [![Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-726-brightgreen.svg)](./tests)
 
 Pure Python implementation of [C4](https://github.com/Avalanche-io/c4) universal content identification (SMPTE ST 2114:2017).
 
