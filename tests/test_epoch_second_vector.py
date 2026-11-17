@@ -99,3 +99,18 @@ def test_saved_c4m_resolves_to_root_id_and_re_encodes_to_itself():
 
 def test_the_epoch_itself_is_still_the_null_sentinel():
     assert is_null_timestamp(NULL_TIMESTAMP)
+
+
+def test_a_directory_inside_the_epoch_second_is_filled_from_its_children():
+    """A directory timed inside the epoch second is null, so its time is
+    filled from its children exactly as a null directory's is."""
+
+    def build(dir_time: datetime) -> Manifest:
+        m = Manifest()
+        m.entries.append(Entry(name="sub/", mode=0o40755, timestamp=dir_time, size=-1, depth=0))
+        m.entries.append(Entry(name="a.txt", mode=0o100644, timestamp=_at(1_750_000_000_000_000_000), size=1, depth=1))
+        return m
+
+    inside, null_dir = build(_at(500_000_000)), build(NULL_TIMESTAMP)
+    assert inside.compute_c4id() == null_dir.compute_c4id()
+    assert loads(dumps(inside)).compute_c4id() == inside.compute_c4id()
