@@ -21,7 +21,17 @@ moved any other file there into a two-character directory, so a c4py
 `put` into a store shared with Go moved Go's journal to `jo/journal`
 (measured), and the journal's lock, which is on the file, with it. The layout is unchanged: c4py and Go read
 each other's stores, split or not, as before. Tested by the shared
-split-race-store fixture, vendored from c4 0893c90.
+split-race-store fixture, vendored from c4 f2b05d3 (byte-identical to
+0893c90).
+
+A lookup now gives core's three-way answer (c4 f2b05d3): a copy, absent,
+or a stat error other than not-found, when whether the object exists is
+unknown. `has` says no for an unknown, as Go's `Has` does; `get` and `put`
+raise the error instead of reporting the object absent or publishing a
+second copy. Through 2026-11-16 a failed stat of a shard directory read as
+absent. `get` searches again at most len(ID) passes, as Go's `Open`, and on
+Windows waits out a split's rename (a sharing violation) within the same
+bound.
 
 ### ⚠ Scan and diff work at the format's resolution: whole seconds
 

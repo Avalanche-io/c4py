@@ -25,10 +25,12 @@ Reference: github.com/Avalanche-io/c4/store/treestore.go
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import stat
 import tempfile
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import BinaryIO
@@ -98,22 +100,56 @@ class FSStore(Store):
         self.split_threshold = split_threshold
 
     def has(self, c4id: C4ID) -> bool:
-        return self._locate(c4id) is not None
+        """True when a copy exists. A lookup that meets an error other than
+        not-found cannot say, and has says no (Go's TreeStore.Has); get and
+        put raise that error instead."""
+        try:
+            self._locate(c4id)
+        except OSError:
+            return False
+        return True
 
     def get(self, c4id: C4ID) -> BinaryIO:
-        """Retrieve content by C4 ID. The caller must close the returned stream."""
-        # Another process's split can move the file down between finding it
-        # and opening it: search again. Each retry follows a file that moved
-        # deeper, so the bound is reached only if the ID keeps being removed
-        # and stored again (Go's TreeStore.Open, c4 #171).
+        """Retrieve content by C4 ID. The caller must close the returned stream.
+
+        Raises ContentNotFound when no level holds a copy, and any other
+        OSError a lookup or open met: whether the object exists is then
+        unknown, and it is never reported as absent (core f2b05d3,
+        TestTreeStoreLookupTellsAbsentFromError).
+        """
+        try:
+            return self._open(self._resolve_path(c4id))
+        except OSError as e:
+            first = e
+        # Not at its place, or its place could not be opened: search every
+        # level. Another process's split can move the file down between
+        # finding it and opening it: search again. The bound is len(ID)
+        # passes, one search and one open each, as Go's openFollows; a file
+        # only moves deeper, so a file that is only being moved is followed
+        # well within it (Go's TreeStore.Open, c4 #171). On Windows an open
+        # can meet the split's rename itself (a sharing violation): wait and
+        # search again, within the same bound, and if it is still held at
+        # the end, raise that, never not-found.
+        held: OSError | None = None
         for _ in range(len(str(c4id))):
-            path = self._locate(c4id)
-            if path is None:
-                break
             try:
-                return open(path, "rb")
+                path = self._locate(c4id)
             except FileNotFoundError:
-                continue
+                if isinstance(first, FileNotFoundError) or _moving(first):
+                    raise ContentNotFound(c4id) from None
+                raise first from None
+            try:
+                return self._open(path)
+            except OSError as e:
+                if _moving(e):
+                    held = e
+                    time.sleep(_MOVING_PAUSE)
+                    continue
+                if not isinstance(e, FileNotFoundError):
+                    raise
+                held = None
+        if held is not None:
+            raise held
         raise ContentNotFound(c4id)
 
     def put(self, source: BinaryIO) -> C4ID:
@@ -139,8 +175,13 @@ class FSStore(Store):
             c4id = C4ID(h.digest())
 
             # Already stored, at any level: skip the rename, as Go does, so
-            # an object never gets a second copy at a deeper place.
-            if self._locate(c4id) is not None:
+            # an object never gets a second copy at a deeper place. A lookup
+            # that cannot say raises, and nothing is published.
+            try:
+                self._locate(c4id)
+            except FileNotFoundError:
+                pass
+            else:
                 os.unlink(tmp_path)
                 return c4id
 
@@ -181,8 +222,23 @@ class FSStore(Store):
 
         return directory / s
 
-    def _locate(self, c4id: C4ID) -> Path | None:
-        """The path of the object file for *c4id*, or None if absent.
+    def _stat(self, path: Path) -> os.stat_result:
+        """Every lookup's stat, a seam for tests."""
+        return os.stat(path)
+
+    def _open(self, path: Path) -> BinaryIO:
+        """Every object open, a seam for tests."""
+        return open(path, "rb")
+
+    def _locate(self, c4id: C4ID) -> Path:
+        """The path of the object file for *c4id*.
+
+        A three-way answer, as core's (``Lookup`` and ``locate`` in Go's
+        store/treestore.go, c4 f2b05d3): the path when a copy exists;
+        FileNotFoundError when no level holds one; any other OSError a stat
+        met (a permission error, EIO) when none was found, because whether
+        the object exists is then unknown and must not be read as absent.
+        Through 2026-11-16 every failed stat read as absent.
 
         Core's lookup rule (``locate`` and ``foldFind`` in Go's
         store/treestore.go; c4 design/store-split-race.md): first the
@@ -206,32 +262,58 @@ class FSStore(Store):
         "c41j..."), which a case-sensitive filesystem then misses.
         """
         p = self._resolve_path(c4id)
-        if p.is_file():
+        exact: OSError | None = None
+        try:
+            self._stat(p)
             return p
-        return self._fold_search(self.root, str(c4id), 0)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            exact = e
+        found, err = self._fold_search(self.root, str(c4id), 0)
+        if found is not None:
+            return found
+        if err is not None:
+            raise err
+        if exact is not None:
+            raise exact
+        raise FileNotFoundError(errno.ENOENT, "no copy at any level", str(self.root / str(c4id)))
 
-    def _fold_search(self, directory: Path, s: str, i: int) -> Path | None:
+    def _fold_search(self, directory: Path, s: str, i: int) -> tuple[Path | None, OSError | None]:
+        """A copy at or below *directory*, or None and the first stat error
+        other than not-found the search met. The search goes on past an
+        error, so a copy elsewhere is still found (Go's foldSearch)."""
+        first: OSError | None = None
         # The file at this level first, then the levels below: the order
         # the files move in (see _locate).
         here = directory / s
-        if here.is_file():
-            return here
+        try:
+            self._stat(here)
+            return here, None
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            first = e
         if i + 2 > len(s):
-            return None
+            return None, first
         seen: list[os.stat_result] = []
         for seg in _fold_variants(s[i:i + 2]):
             sub = directory / seg
             try:
-                st = sub.stat()
-            except OSError:
+                st = self._stat(sub)
+            except FileNotFoundError:
+                continue
+            except OSError as e:
+                first = first or e
                 continue
             if not stat.S_ISDIR(st.st_mode) or any(os.path.samestat(st, o) for o in seen):
                 continue
             seen.append(st)
-            found = self._fold_search(sub, s, i + 2)
+            found, err = self._fold_search(sub, s, i + 2)
             if found is not None:
-                return found
-        return None
+                return found, None
+            first = first or err
+        return None, first
 
     def _maybe_split(self, directory: Path) -> None:
         """Split a leaf directory if it exceeds the threshold.
@@ -270,6 +352,17 @@ class FSStore(Store):
             subdir = directory / subdir_name
             subdir.mkdir(exist_ok=True)
             os.replace(str(f), str(subdir / name))
+
+
+# How long get waits before it looks again for a file whose open met a
+# rename in progress (Go's movingPause).
+_MOVING_PAUSE = 0.001
+
+
+def _moving(err: OSError | None) -> bool:
+    """An open that failed because another process's rename holds the file:
+    ERROR_SHARING_VIOLATION, which only Windows produces (Go's moving)."""
+    return err is not None and getattr(err, "winerror", None) == 32
 
 
 def _fold_variants(seg: str) -> list[str]:

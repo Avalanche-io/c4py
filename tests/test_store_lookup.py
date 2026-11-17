@@ -183,3 +183,58 @@ def test_get_follows_a_file_moved_down_after_it_was_found(tmp_path: Path, monkey
     with store.get(c4id) as f:
         assert f.read().startswith(b"obj-")
     assert calls["n"] == 2
+
+
+def test_lookup_tells_absent_from_error(tmp_path: Path, monkeypatch):
+    """A stat that fails other than not-found leaves the object's presence
+    unknown: has says no, get and put raise the error, and nothing is
+    published (core f2b05d3, TestTreeStoreLookupTellsAbsentFromError)."""
+    import errno
+
+    store = FSStore(tmp_path)
+    data = b"an object a stat cannot reach"
+    c4id = store.put(BytesIO(data))
+    s = str(c4id)
+    (tmp_path / s[0:2]).mkdir()  # mid-split
+    shallow = tmp_path / s
+    assert shallow.is_file()
+    real = FSStore._stat
+
+    def eio(self, path):
+        if Path(path) == shallow:
+            raise OSError(errno.EIO, "input/output error (simulated)", str(path))
+        return real(self, path)
+
+    monkeypatch.setattr(FSStore, "_stat", eio)
+    r = FSStore(tmp_path)
+    assert not r.has(c4id)
+    with pytest.raises(OSError) as got:
+        r.get(c4id)
+    assert got.value.errno == errno.EIO and not isinstance(got.value, ContentNotFound)
+    with pytest.raises(OSError) as got:
+        r.put(BytesIO(data))
+    assert got.value.errno == errno.EIO
+    monkeypatch.undo()
+    assert not (tmp_path / s[0:2] / s).exists(), "a second copy was published below"
+    assert shallow.read_bytes() == data
+    assert not [p for p in tmp_path.iterdir() if p.name.startswith(".ingest.")]
+
+
+def test_get_retry_is_bounded(tmp_path: Path, monkeypatch):
+    """An object found on every search but gone at every open ends in
+    ContentNotFound after len(ID) passes, never a loop (Go's
+    TestTreeStoreOpenRetryIsBounded)."""
+    store, ids = _split_store(tmp_path)
+    c4id = ids[0]
+    path = store._locate(c4id)
+    calls = {"open": 0}
+
+    def gone(self, p):
+        calls["open"] += 1
+        raise FileNotFoundError(2, "removed", str(p))
+
+    monkeypatch.setattr(FSStore, "_locate", lambda self, i: path)
+    monkeypatch.setattr(FSStore, "_open", gone)
+    with pytest.raises(ContentNotFound):
+        store.get(c4id)
+    assert calls["open"] == 1 + len(str(c4id))
