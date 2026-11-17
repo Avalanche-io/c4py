@@ -18,6 +18,7 @@ and copies the c4m file(s) into the working directory.
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import stat
 from dataclasses import dataclass, field
@@ -204,17 +205,24 @@ def _write_extract_script(output_dir: Path, manifest: Manifest) -> None:
             c4m_name = item.name
             break
 
+    # The default target is a folder named after the c4m, never ".": the
+    # extraction makes its target match the c4m, so run inside the bundle
+    # with "." it deleted the bundle's own extract.sh, store and c4m. A
+    # plain assignment, because inside "${1:-...}" the quotes shlex adds
+    # would be literal characters of the folder name.
+    default_target = "./" + shlex.quote(Path(c4m_name).stem)
     script = (
         "#!/bin/sh\n"
         "# Auto-generated extraction script for c4m pool bundle.\n"
         "# Requires: c4py (pip install c4py) or c4 CLI\n"
         "#\n"
-        "# Usage: sh extract.sh [target_directory]\n"
+        f"# Usage: sh extract.sh [target_directory]   (default: ./{Path(c4m_name).stem})\n"
         "#\n"
         'set -e\n'
         '\n'
         'BUNDLE_DIR="$(cd "$(dirname "$0")" && pwd)"\n'
-        'TARGET="${1:-.}"\n'
+        f'TARGET={default_target}\n'
+        'if [ -n "$1" ]; then TARGET="$1"; fi\n'
         '\n'
         'mkdir -p "$TARGET"\n'
         '\n'
