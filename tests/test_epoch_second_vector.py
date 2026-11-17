@@ -66,6 +66,10 @@ def test_a_built_entry_is_null_at_the_second(ns: int, null: bool):
     text = dumps(m)
     assert (_field(text, "f.txt") == "-") is null
     assert m.compute_c4id() == loads(text).compute_c4id()
+    # The pretty form spells the same null and reads back to the same ID.
+    pretty = dumps(m, pretty=True)
+    assert (pretty.split()[1] == "-") is null
+    assert loads(pretty).compute_c4id() == m.compute_c4id()
 
 
 def test_the_scan_is_saved_c4m_and_one_description_id(tmp_path: Path):
