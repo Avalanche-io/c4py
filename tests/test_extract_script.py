@@ -109,3 +109,19 @@ def test_a_default_folder_that_holds_files_is_refused(tmp_path: Path):
     assert (bundle / "delivery" / "notes.txt").read_text() == "unrelated"
     assert sorted(p.name for p in (bundle / "delivery").iterdir()) == ["notes.txt"]
     _assert_bundle_intact(bundle, "delivery.c4m")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="extract.sh is a POSIX shell script")
+@pytest.mark.parametrize("stem", ["it's", 'say "hi"', "$(touch pwned)", "a b"])
+def test_a_c4m_name_is_never_read_as_shell(tmp_path: Path, stem: str):
+    bundle = _bundle(tmp_path, stem + ".c4m")
+
+    r = _run(bundle / "extract.sh", bundle)
+
+    assert r.returncode == 0, r.stdout + r.stderr
+    _assert_bundle_intact(bundle, stem + ".c4m")
+    _assert_tree(bundle / stem)
+    assert not list(tmp_path.rglob("pwned")), "a name ran as a command"
+    script = (bundle / "extract.sh").read_text()
+    comments = [line for line in script.splitlines() if line.startswith("#")]
+    assert not any(stem in line for line in comments), "the c4m name is in a comment"
