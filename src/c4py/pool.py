@@ -211,12 +211,16 @@ def _write_extract_script(output_dir: Path, manifest: Manifest) -> None:
     # plain assignment, because inside "${1:-...}" the quotes shlex adds
     # would be literal characters of the folder name.
     default_target = "./" + shlex.quote(Path(c4m_name).stem)
+    # The c4m's name reaches the script only shell-quoted: a name holding a
+    # quote, "$(...)" or a newline must never be read as shell. The comment
+    # doesn't name it at all.
+    c4m_arg = shlex.quote(c4m_name)
     script = (
         "#!/bin/sh\n"
         "# Auto-generated extraction script for c4m pool bundle.\n"
         "# Requires: c4py (pip install c4py) or c4 CLI\n"
         "#\n"
-        f"# Usage: sh extract.sh [target_directory]   (default: ./{Path(c4m_name).stem})\n"
+        "# Usage: sh extract.sh [target_directory]   (default: a new folder named after the c4m)\n"
         "#\n"
         'set -e\n'
         '\n'
@@ -235,14 +239,14 @@ def _write_extract_script(output_dir: Path, manifest: Manifest) -> None:
         'mkdir -p "$TARGET"\n'
         '\n'
         'if command -v c4 >/dev/null 2>&1; then\n'
-        f'  C4_STORE="$BUNDLE_DIR/store" c4 patch "$BUNDLE_DIR/{c4m_name}" "$TARGET"\n'
+        f'  C4_STORE="$BUNDLE_DIR/store" c4 patch "$BUNDLE_DIR"/{c4m_arg} "$TARGET"\n'
         'elif command -v python3 >/dev/null 2>&1; then\n'
         '  python3 -c "\n'
         'import sys, c4py\n'
         "m = c4py.load(sys.argv[1])\n"
         "s = c4py.open_store(sys.argv[2])\n"
         "c4py.reconcile(m, sys.argv[3], store=s)\n"
-        f'" "$BUNDLE_DIR/{c4m_name}" "$BUNDLE_DIR/store" "$TARGET"\n'
+        f'" "$BUNDLE_DIR"/{c4m_arg} "$BUNDLE_DIR/store" "$TARGET"\n'
         'else\n'
         '  echo "Error: requires c4 CLI or python3 with c4py installed" >&2\n'
         '  exit 1\n'
