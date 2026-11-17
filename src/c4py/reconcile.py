@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .decoder import load
-from .entry import NULL_TIMESTAMP, Entry, is_null_mode, os_mode
+from .entry import Entry, is_null_mode, os_mode, is_null_timestamp
 from .id import C4ID, identify_file
 from .manifest import Manifest
 from .store import Store, open_store
@@ -273,7 +273,7 @@ def _apply_file_meta(path: Path, entry: Entry) -> None:
     if not is_null_mode(entry.mode):
         _chmod(path, entry.mode)
 
-    if entry.timestamp != NULL_TIMESTAMP:
+    if not is_null_timestamp(entry.timestamp):
         epoch = _truncate_to_seconds(entry.timestamp)
         try:
             os.utime(str(path), (epoch, epoch))
@@ -287,7 +287,7 @@ def _apply_dir_meta(path: Path, entry: Entry) -> None:
     Called after the directory's children are written. Order matters: a
     known zero mode ("d---------") set first would refuse the utime.
     """
-    if entry.timestamp != NULL_TIMESTAMP:
+    if not is_null_timestamp(entry.timestamp):
         epoch = _truncate_to_seconds(entry.timestamp)
         try:
             os.utime(str(path), (epoch, epoch))

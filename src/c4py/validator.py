@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .entry import NULL_SIZE, NULL_TIMESTAMP, Entry, os_mode
+from .entry import NULL_SIZE, Entry, os_mode, is_null_timestamp
 from .id import BASE58_ALPHABET, C4_ID_LENGTH, C4_PREFIX
 from .manifest import Manifest
 
@@ -239,7 +239,7 @@ def _validate_timestamp(entry: Entry, line: int, result: ValidationResult) -> No
     ts = entry.timestamp
 
     # Null timestamp is valid
-    if ts == NULL_TIMESTAMP:
+    if is_null_timestamp(ts):
         return
 
     # Check timezone awareness

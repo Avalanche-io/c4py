@@ -2,6 +2,19 @@
 
 ## Unreleased (1.1)
 
+### ⚠ A time inside the epoch second is null, for entries a caller builds too
+
+**Convergence fixed.** An entry built in memory with a time inside the
+epoch second (0.5 s after it, say) was written `1970-01-01T00:00:00Z`,
+which reads back as null, so a manifest's C4 ID differed from the ID of its
+own text. Every null test compared the unfloored datetime with the epoch.
+The new `is_null_timestamp` floors to the second first, and every null-time
+test (the encoder, `Entry.has_null_timestamp`, `format_timestamp`, the
+manifest, reconcile and the validator) uses it. c4py's scan already floored
+at capture, so scanned trees don't change. **C4 IDs change** only for
+manifests holding a built entry timed in (0, 1) s after the epoch. Tested
+by core's shared epoch-second vector (c4 #192), vendored byte for byte.
+
 ### ⚠ A bundle's extract.sh never empties the folder it is run from (data loss fixed)
 
 Run a bundle's extract.sh with a new, empty target:

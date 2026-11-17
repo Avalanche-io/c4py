@@ -8,3 +8,4 @@ tests/vectors/backslash-name-vector/* -text
 tests/vectors/damaged-line-vector/* -text
 tests/vectors/childless-dir-vector/* -text
 tests/vectors/changeset-vector/* -text
+tests/vectors/epoch-second-vector/* -text

@@ -19,6 +19,7 @@ from .entry import (
     Entry,
     _human_size,
     is_path_name,
+    is_null_timestamp,
 )
 from .id import C4ID
 
@@ -381,7 +382,7 @@ def _propagate_metadata(entries: list[Entry]) -> None:
             continue
         has_null = (
             (entry.mode == 0 and not entry.is_dir() and not entry.is_symlink())
-            or entry.timestamp == NULL_TIMESTAMP
+            or is_null_timestamp(entry.timestamp)
             or entry.has_null_size()
         )
         if not has_null:
@@ -392,7 +393,7 @@ def _propagate_metadata(entries: list[Entry]) -> None:
         if entry.has_null_size():
             entry.size = _calculate_directory_size(entry, children)
 
-        if entry.timestamp == NULL_TIMESTAMP:
+        if is_null_timestamp(entry.timestamp):
             entry.timestamp = _get_most_recent_modtime(children)
 
 
@@ -457,7 +458,7 @@ def _get_most_recent_modtime(children: list[Entry]) -> datetime:
     """Find most recent modification time. Nil-infectious."""
     most_recent: datetime | None = None
     for e in children:
-        if e.timestamp == NULL_TIMESTAMP:
+        if is_null_timestamp(e.timestamp):
             return NULL_TIMESTAMP
         if most_recent is None or e.timestamp > most_recent:
             most_recent = e.timestamp
