@@ -73,7 +73,7 @@ Bundle a delivery for USB/air-gap transfer. The bundle includes an
 python portable_bundle.py pack /projects/HERO/deliveries/v03/ bundle/
 # hand someone the USB drive
 python portable_bundle.py unpack bundle/ /projects/received/
-# or without c4py: cd bundle && sh extract.sh
+# or without c4py: sh bundle/extract.sh /projects/received/
 ```
 
 Bundles made by c4py 1.0.26 or earlier carry an older `extract.sh` that, run
