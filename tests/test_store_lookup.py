@@ -238,3 +238,76 @@ def test_get_retry_is_bounded(tmp_path: Path, monkeypatch):
     with pytest.raises(ContentNotFound):
         store.get(c4id)
     assert calls["open"] == 1 + len(str(c4id))
+
+
+def test_publish_race_is_a_success(tmp_path: Path, monkeypatch):
+    """A publishing rename that fails because another writer published the
+    same bytes first is not a failure: the same name means the same bytes
+    (Go's publish, c4 #179)."""
+    store = FSStore(tmp_path)
+    data = b"published twice"
+    other = FSStore(tmp_path)
+
+    def lose_the_race(self, src, dst):
+        FSStore._replace = real
+        other.put(BytesIO(data))  # the other writer publishes first
+        FSStore._replace = lose_the_race
+        raise PermissionError(13, "Access is denied (simulated)", dst)
+
+    real = FSStore._replace
+    monkeypatch.setattr(FSStore, "_replace", lose_the_race)
+    c4id = store.put(BytesIO(data))
+    monkeypatch.undo()
+    with store.get(c4id) as f:
+        assert f.read() == data
+    assert not [p for p in tmp_path.iterdir() if p.name.startswith(".ingest.")]
+
+
+def test_publish_failure_with_the_object_absent_raises(tmp_path: Path, monkeypatch):
+    store = FSStore(tmp_path)
+
+    def fail(self, src, dst):
+        raise PermissionError(13, "Access is denied (simulated)", dst)
+
+    monkeypatch.setattr(FSStore, "_replace", fail)
+    with pytest.raises(PermissionError):
+        store.put(BytesIO(b"never published"))
+    assert not [p for p in tmp_path.iterdir() if p.name.startswith(".ingest.")]
+
+
+def _sharing_violation() -> OSError:
+    e = PermissionError(13, "The process cannot access the file (simulated)")
+    e.winerror = 32  # type: ignore[attr-defined]
+    return e
+
+
+def test_get_waits_out_a_rename_holding_the_file(tmp_path: Path, monkeypatch):
+    """On Windows an open can meet another process's split renaming the file
+    (a sharing violation): get waits and looks again (Go's moving)."""
+    store, ids = _split_store(tmp_path)
+    c4id = ids[0]
+    real = FSStore._open
+    calls = {"n": 0}
+
+    def held_twice(self, p):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise _sharing_violation()
+        return real(self, p)
+
+    monkeypatch.setattr(FSStore, "_open", held_twice)
+    with store.get(c4id) as f:
+        assert f.read().startswith(b"obj-")
+    assert calls["n"] == 3
+
+
+def test_get_raises_the_sharing_violation_when_the_bound_runs_out(tmp_path: Path, monkeypatch):
+    store, ids = _split_store(tmp_path)
+
+    def always_held(self, p):
+        raise _sharing_violation()
+
+    monkeypatch.setattr(FSStore, "_open", always_held)
+    with pytest.raises(PermissionError) as got:
+        store.get(ids[0])
+    assert getattr(got.value, "winerror", None) == 32

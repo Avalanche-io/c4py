@@ -188,8 +188,8 @@ class FSStore(Store):
             # Atomic rename (same filesystem). Content-addressed = idempotent.
             dest = self._resolve_path(c4id)
             dest.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(tmp_path, str(dest))
-            self._maybe_split(dest.parent)
+            if self._publish(tmp_path, dest, c4id):
+                self._maybe_split(dest.parent)
 
             return c4id
         except Exception:
@@ -221,6 +221,29 @@ class FSStore(Store):
             i += 2
 
         return directory / s
+
+    def _publish(self, tmp_path: str, dest: Path, c4id: C4ID) -> bool:
+        """Rename the complete temp file to the object's name, and report
+        whether this rename published it. The same name means the same
+        bytes, so a rename that fails while the object is now present lost
+        a race to another writer of the same bytes and is not a failure (on
+        Windows a rename onto a name another writer holds is refused; Go's
+        publish, c4 #179). A failure with the object absent, or unknown, is
+        raised."""
+        try:
+            self._replace(tmp_path, str(dest))
+            return True
+        except OSError as err:
+            try:
+                self._locate(c4id)
+            except OSError:
+                raise err from None
+            os.unlink(tmp_path)
+            return False
+
+    def _replace(self, src: str, dst: str) -> None:
+        """The publishing rename, a seam for tests."""
+        os.replace(src, dst)
 
     def _stat(self, path: Path) -> os.stat_result:
         """Every lookup's stat, a seam for tests."""
