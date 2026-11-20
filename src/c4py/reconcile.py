@@ -82,6 +82,7 @@ def reconcile(
     """
     manifest = _resolve_manifest(manifest_or_path)
     directory = Path(directory)
+    _refuse_folded_ranges(manifest)
 
     if store is None:
         store = open_store()
@@ -105,6 +106,25 @@ def _resolve_manifest(manifest_or_path: Manifest | str | Path) -> Manifest:
     if isinstance(manifest_or_path, Manifest):
         return manifest_or_path
     return load(str(manifest_or_path))
+
+
+def _refuse_folded_ranges(manifest: Manifest) -> None:
+    """Refuse a manifest holding a folded range, before anything is written.
+
+    A folded range is one line standing for numbered frames
+    (``frame.[0001-0100].exr``); writing it back means expanding it from its
+    ID list into one file per frame, and c4py has no expander. Without this
+    check the range line was written as a single file under the range's
+    name, holding the ID list's bytes, and reported as created. The refusal
+    covers the dry run too, whose plan would list that file.
+    """
+    folded = [path for path, entry in manifest.flat_entries() if entry.is_sequence]
+    if folded:
+        raise ValueError(
+            "this version of c4py can't write a folded range back to files, "
+            "so nothing was written; use a description made without folding "
+            "(c4 id without -S). Folded ranges: " + ", ".join(folded)
+        )
 
 
 def _build_plan(manifest: Manifest, directory: Path, store: Store) -> ReconcilePlan:
