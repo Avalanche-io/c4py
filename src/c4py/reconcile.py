@@ -15,7 +15,7 @@ import os
 import stat
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .decoder import load
@@ -217,12 +217,18 @@ def _execute_plan(
 
         try:
             if op.type == "mkdir":
+                made = not full.is_dir()
                 full.mkdir(parents=True, exist_ok=True)
                 mkdir_entry = meta.get(op.path)
                 if mkdir_entry is not None:
                     _apply_dir_meta(full, mkdir_entry)
                     if not is_null_timestamp(mkdir_entry.timestamp):
                         dir_timestamps.append((op.path, mkdir_entry.timestamp))
+                    elif made:
+                        # A folder this reconcile made from a null timestamp
+                        # gets the epoch, which scans back as null; an
+                        # existing one keeps its time (core dfd6e12).
+                        dir_timestamps.append((op.path, _EPOCH))
                 result.created += 1
 
             elif op.type == "create":
@@ -230,7 +236,7 @@ def _execute_plan(
                 create_entry = meta.get(op.path)
                 if create_entry is not None and create_entry.c4id is not None:
                     _write_from_store(full, create_entry.c4id, store)
-                    _apply_file_meta(full, create_entry)
+                    _apply_file_meta(full, create_entry, fresh=True)
                 else:
                     full.touch()
                 result.created += 1
@@ -239,7 +245,7 @@ def _execute_plan(
                 update_entry = meta.get(op.path)
                 if update_entry is not None and update_entry.c4id is not None:
                     _write_from_store(full, update_entry.c4id, store)
-                    _apply_file_meta(full, update_entry)
+                    _apply_file_meta(full, update_entry, fresh=True)
                 result.updated += 1
 
             elif op.type == "remove":
@@ -297,8 +303,19 @@ def _write_from_store(dest: Path, c4id: C4ID, store: Store) -> None:
         reader.close()
 
 
-def _apply_file_meta(path: Path, entry: Entry) -> None:
-    """Set permissions and timestamps on a file."""
+_EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
+
+
+def _apply_file_meta(path: Path, entry: Entry, *, fresh: bool) -> None:
+    """Set permissions and timestamps on a file.
+
+    *fresh* says this reconcile wrote the file's content (a create, or an
+    overwrite of different content, as core's apply treats both). A null
+    timestamp then becomes the epoch, which scans back as null, so the tree
+    reads back at the description's ID; through 1.0.26 it was left at the
+    time of writing. On a path that already exists a null never overwrites
+    (core's reconcile/apply.go setMetadata, dfd6e12).
+    """
     if entry.mode != 0:
         # Extract permission bits only (mask out file-type bits).
         perms = stat.S_IMODE(entry.mode)
@@ -309,10 +326,14 @@ def _apply_file_meta(path: Path, entry: Entry) -> None:
 
     if not is_null_timestamp(entry.timestamp):
         epoch = _truncate_to_seconds(entry.timestamp)
-        try:
-            os.utime(str(path), (epoch, epoch))
-        except OSError:
-            pass
+    elif fresh:
+        epoch = 0.0
+    else:
+        return
+    try:
+        os.utime(str(path), (epoch, epoch))
+    except OSError:
+        pass
 
 
 def _apply_dir_meta(path: Path, entry: Entry) -> None:
