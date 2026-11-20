@@ -2,6 +2,14 @@
 
 ## Unreleased (1.1)
 
+### ⚠ reconcile refuses a c4m holding a folded range, before writing anything
+
+**Silent corruption fixed.** Handed a c4m holding a folded range (one line
+such as `frame.[0001-0100].exr`), `reconcile` wrote the range's ID list into
+one file named like the range, wrote no frame, and reported success; it now
+refuses the whole c4m with a `ValueError` naming the range, before anything
+is written (#61).
+
 ### ⚠ Behaviour change: reconcile gives the epoch to a file or folder it creates from a null timestamp
 
 **Behaviour change.** A null timestamp (`-`) means the time is unknown.
