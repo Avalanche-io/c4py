@@ -36,22 +36,34 @@ def main():
 
     result = c4py.diff(old, new)
 
-    # Group changes by shot directory
+    # diff() matches entries by full path, but the entries it returns carry
+    # bare names ("frame.1002.exr", "comp/"). Map each back to its path in the
+    # manifest it came from.
+    old_paths = {id(e): p for p, e in old.flat_entries()}
+    new_paths = {id(e): p for p, e in new.flat_entries()}
+
+    def shot_of(path):
+        parts = path.split("/")
+        if len(parts) > 2 and parts[0] == "shots":
+            return parts[1]  # shots/<shot>/...
+        return "(outside shots/)"
+
+    # Group changed files by shot. Folders are left out: a folder counts as
+    # modified whenever anything under it changes.
     shots = {}
-    for entry in result.added:
-        shot = entry.name.split("/")[0] if "/" in entry.name else "(root)"
-        shots.setdefault(shot, {"added": 0, "removed": 0, "modified": 0})
-        shots[shot]["added"] += 1
-
-    for entry in result.removed:
-        shot = entry.name.split("/")[0] if "/" in entry.name else "(root)"
-        shots.setdefault(shot, {"added": 0, "removed": 0, "modified": 0})
-        shots[shot]["removed"] += 1
-
-    for entry in result.modified:
-        shot = entry.name.split("/")[0] if "/" in entry.name else "(root)"
-        shots.setdefault(shot, {"added": 0, "removed": 0, "modified": 0})
-        shots[shot]["modified"] += 1
+    totals = {"added": 0, "removed": 0, "modified": 0}
+    for kind, entries, paths in (
+        ("added", result.added, new_paths),
+        ("removed", result.removed, old_paths),
+        ("modified", result.modified, new_paths),
+    ):
+        for entry in entries:
+            if entry.is_dir():
+                continue
+            shot = shot_of(paths[id(entry)])
+            shots.setdefault(shot, {"added": 0, "removed": 0, "modified": 0})
+            shots[shot][kind] += 1
+            totals[kind] += 1
 
     if not shots:
         print("\nDeliveries are identical.")
@@ -63,8 +75,8 @@ def main():
         s = shots[shot]
         print(f"{shot:<30} {s['added']:>8} {s['removed']:>8} {s['modified']:>8}")
 
-    print(f"\nTotal: +{len(result.added)} -{len(result.removed)} ~{len(result.modified)}")
-    print(f"Unchanged: {len(result.same)} files")
+    print(f"\nTotal: +{totals['added']} -{totals['removed']} ~{totals['modified']} files")
+    print(f"Unchanged: {sum(1 for e in result.same if not e.is_dir())} files")
 
     # Save the new manifest for next time
     c4m_file = new_dir.rstrip("/").split("/")[-1] + ".c4m"

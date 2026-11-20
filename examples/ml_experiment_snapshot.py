@@ -27,9 +27,23 @@ Two researchers with the same c4m file trained on provably identical data.
 """
 
 import argparse
+import os
 from datetime import datetime, timezone
 
 import c4py
+
+
+def file_entry(path, depth):
+    """One file's entry: its name, mode, mtime, size and C4 ID."""
+    info = os.stat(path)
+    return c4py.Entry(
+        name=os.path.basename(path),
+        mode=info.st_mode,
+        timestamp=datetime.fromtimestamp(info.st_mtime, tz=timezone.utc),
+        size=info.st_size,
+        c4id=c4py.identify_file(path),
+        depth=depth,
+    )
 
 
 def snapshot(args):
@@ -51,7 +65,15 @@ def snapshot(args):
 
     for label, path in components:
         print(f"Scanning {label}: {path}")
-        m = c4py.scan(path, store=store)
+        if os.path.isfile(path):
+            # scan() takes a directory; a single file (a config) is one entry
+            m = c4py.Manifest()
+            m.entries.append(file_entry(path, depth=0))
+            if store is not None:
+                with open(path, "rb") as f:
+                    store.put(f)
+        else:
+            m = c4py.scan(path, store=store)
         print(f"  {m.summary()}")
 
         # Add a directory entry for this component
@@ -76,10 +98,10 @@ def snapshot(args):
 
 def add_checkpoint(args):
     manifest = c4py.load(args.experiment)
-    c4id = c4py.identify_file(args.checkpoint)
+    ckpt = file_entry(args.checkpoint, depth=1)
 
     print(f"Checkpoint: {args.checkpoint}")
-    print(f"  C4 ID: {c4id}")
+    print(f"  C4 ID: {ckpt.c4id}")
 
     # Store if possible
     try:
@@ -90,23 +112,14 @@ def add_checkpoint(args):
     except (ValueError, Exception):
         print("  (no store configured, checkpoint not stored)")
 
-    import os
-    info = os.stat(args.checkpoint)
     manifest.entries.append(c4py.Entry(
         name="checkpoint/",
         mode=0o40755,
-        timestamp=datetime.fromtimestamp(info.st_mtime, tz=timezone.utc),
+        timestamp=ckpt.timestamp,
         size=-1,
         depth=0,
     ))
-    manifest.entries.append(c4py.Entry(
-        name=os.path.basename(args.checkpoint),
-        mode=info.st_mode,
-        timestamp=datetime.fromtimestamp(info.st_mtime, tz=timezone.utc),
-        size=info.st_size,
-        c4id=c4id,
-        depth=1,
-    ))
+    manifest.entries.append(ckpt)
 
     manifest.sort_entries()
     c4py.dump(manifest, args.experiment)
