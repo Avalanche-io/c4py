@@ -40,6 +40,29 @@ def test_changeset_never_ends_with_a_bare_id() -> None:
     assert not (len(last) == 90 and last.startswith("c4"))
 
 
+def test_patch_diff_of_an_unchanged_state_is_empty() -> None:
+    """Nothing changed: nothing written, as ``c4 diff base.c4m base.c4m``.
+
+    Through 1.0.26 (and on this line before this change) the result was
+    the base ID alone, a bare C4 ID that ends the file it is appended to.
+    """
+    base = load(str(VECTOR / "base.c4m"))
+    assert patch_diff(base, load(str(VECTOR / "base.c4m"))) == ""
+
+
+def test_unchanged_patch_appended_to_base_reads_back_as_base() -> None:
+    """``base.c4m + patch_diff(base, base)`` is a c4m every reader accepts.
+
+    A lone ID appended made a file ending in a bare C4 ID, which c4py's own
+    reader and core 1.0.27's (``c4 id``) refuse as an empty patch section.
+    """
+    base = load(str(VECTOR / "base.c4m"))
+    text = _text("base.c4m") + patch_diff(base, load(str(VECTOR / "base.c4m")))
+    last = text.rstrip("\n").split("\n")[-1]
+    assert not (len(last) == 90 and last.startswith("c4"))
+    assert dumps(loads(text)) == _text("base.c4m")
+
+
 def test_chain_resolves_to_v2() -> None:
     m = load(str(VECTOR / "chain.c4m"))
     assert "sub/gone.txt" not in [p for p, _ in m.flat_entries()]

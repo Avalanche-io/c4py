@@ -3,6 +3,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 
+from c4py.decoder import loads
 from c4py.diff import (
     DiffResult,
     _entries_identical,
@@ -14,6 +15,7 @@ from c4py.diff import (
     patch_diff,
     resolve_chain,
 )
+from c4py.encoder import dumps
 from c4py.entry import Entry
 from c4py.id import identify_bytes
 from c4py.manifest import Manifest
@@ -204,11 +206,19 @@ class TestPatchRoundTrip:
         entries = [_make_entry("file1.txt", content=b"hello")]
         old = Manifest(entries=deepcopy(entries))
         new = Manifest(entries=deepcopy(entries))
+        # Nothing to patch: empty, as `c4 diff` prints nothing. The old ID
+        # alone, appended to old.c4m, would end the file with a bare ID.
+        assert patch_diff(old, new) == ""
+
+    def test_one_change_still_writes_its_patch(self):
+        """Only an unchanged state gives "": one change is a patch."""
+        old = Manifest(entries=[_make_entry("file1.txt", content=b"hello")])
+        new = Manifest(entries=[_make_entry("file1.txt", content=b"goodbye")])
         patch_text = patch_diff(old, new)
-        lines = [line for line in patch_text.split("\n") if line.strip()]
-        # Should only have the base C4 ID line, no patch entries
-        assert len(lines) == 1
-        assert lines[0].startswith("c4")
+        lines = [line for line in patch_text.split("\n") if line]
+        assert lines[0] == str(old.compute_c4id())
+        assert len(lines) == 2
+        assert loads(dumps(old) + patch_text).compute_c4id() == new.compute_c4id()
 
 
 class TestResolveChain:
