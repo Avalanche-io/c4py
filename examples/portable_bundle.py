@@ -8,7 +8,8 @@ self-contained bundle with everything they need.
     # Create the bundle
     python portable_bundle.py pack /projects/HERO/deliveries/v03/ bundle/
 
-    # On the receiving end (they need the c4 CLI or c4py, not both)
+    # On the receiving end (the c4 CLI or c4py; only the c4 CLI restores
+    # symbolic links, which c4py writes as regular files or leaves out)
     sh bundle/extract.sh /projects/received/
 
     # Or if they have c4py:

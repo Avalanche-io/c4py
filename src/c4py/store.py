@@ -6,11 +6,14 @@ trie), so content stored by any tool is immediately readable by any other.
 
 Configuration is resolved in priority order:
     1. Explicit path passed to open_store()
-    2. C4_STORE environment variable (path or s3:// URI)
+    2. C4_STORE environment variable (a local path; an s3:// URI raises
+       NotImplementedError)
     3. ~/.c4/config file (store setting)
 
 Storage layout uses adaptive trie sharding (matching Go store.TreeStore):
-    - All C4 IDs start with "c4", so the store root has one dir: c4/
+    - A new store keeps objects flat at its root. Once the root holds more
+      than SPLIT_THRESHOLD files it splits, and because every C4 ID starts
+      with "c4", the root then holds a single directory, c4/
     - Directories are either leaves (contain content files) or interior nodes
       (contain 2-char subdirectories). Never both.
     - When a leaf exceeds SPLIT_THRESHOLD files, it splits into 2-char subdirs

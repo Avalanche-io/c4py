@@ -67,7 +67,9 @@ Designed to run from Deadline/Tractor/OpenCue event hooks.
 ## Portable bundle (sneakernet)
 
 Bundle a delivery for USB/air-gap transfer. The bundle includes an
-`extract.sh` that needs either the c4 CLI or c4py, not both:
+`extract.sh` that uses the c4 CLI if it's installed, and c4py otherwise.
+Only the c4 CLI restores symbolic links: c4py (and so `unpack`) writes a
+link as a regular file, or leaves it out.
 
 ```bash
 python portable_bundle.py pack /projects/HERO/deliveries/v03/ bundle/

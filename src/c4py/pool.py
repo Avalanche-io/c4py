@@ -219,6 +219,8 @@ def _write_extract_script(output_dir: Path, manifest: Manifest) -> None:
         "#!/bin/sh\n"
         "# Auto-generated extraction script for c4m pool bundle.\n"
         "# Requires: c4py (pip install c4py) or c4 CLI\n"
+        "# Only the c4 CLI restores symbolic links; c4py writes a link as a\n"
+        "# regular file, or leaves it out.\n"
         "#\n"
         "# Usage: sh extract.sh [target_directory]   (default: a new folder named after the c4m)\n"
         "#\n"

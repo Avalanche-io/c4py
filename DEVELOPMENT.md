@@ -7,8 +7,8 @@ This document specifies the implementation requirements for c4py. All modules ar
 ```
 src/c4py/
   __init__.py      # Public API (complete — re-exports from modules)
-  id.py            # C4 ID computation (IMPLEMENTED — 27/27 cross-language tests pass)
-  store.py         # Content store (IMPLEMENTED — 13/13 tests pass, adaptive trie sharding)
+  id.py            # C4 ID computation (IMPLEMENTED; cross-language tests in tests/test_id.py)
+  store.py         # Content store (IMPLEMENTED; adaptive trie sharding)
   entry.py         # Entry dataclass (IMPLEMENTED)
   manifest.py      # Manifest type (IMPLEMENTED)
   decoder.py       # c4m parser (IMPLEMENTED)
@@ -20,9 +20,9 @@ src/c4py/
   validator.py     # Validation (IMPLEMENTED)
 ```
 
-## CLI Alignment (c4 v1.0.0)
+## CLI Alignment (c4 master, 1.1)
 
-c4py maps to the c4 CLI (8 commands: id, cat, diff, patch, merge, log, split, version).
+c4py maps to the c4 CLI (12 commands: id, restore, cat, diff, patch, merge, paths, intersect, log, explain, split, version).
 
 | c4py function | c4 CLI | Description |
 |---------------|--------|-------------|
@@ -35,19 +35,17 @@ c4py maps to the c4 CLI (8 commands: id, cat, diff, patch, merge, log, split, ve
 | `diff()` | — | High-level comparison (added/removed/modified) |
 
 Key interop points:
-- **Shared content store:** TreeStore adaptive trie, same config (`C4_STORE` / `~/.c4/config`).
-- **`scan(store=...)` maps to `c4 id -s`:** Single-pass identify + store.
-- **Canonical output matches `c4 id`:** `c4py.dumps(manifest)` produces byte-identical output.
-- **Reconciliation:** c4py includes a full reconcile module (`reconcile.py`) and workspace module (`workspace.py`) for applying manifest state to directories, matching the Go `reconcile` package.
+- **Shared content store:** TreeStore adaptive trie, the same layout as Go's. Config: `C4_STORE` (one local path) or `~/.c4/config`'s `store` line; c4py doesn't read `c4`'s comma-separated list of stores.
+- **`scan(store=...)` is like `c4 id -s`:** single-pass identify + store, of file content only; directory listings are not stored.
+- **Canonical output matches `c4 id`:** `c4py.dumps(manifest)` produces byte-identical output for the same entries. `scan()` skips names starting with `.`, which `c4 id` keeps.
+- **Reconciliation:** c4py includes a reconcile module (`reconcile.py`) and workspace module (`workspace.py`) for applying manifest state to directories, after the Go `reconcile` package. Unlike it, `reconcile` doesn't create symbolic links: it writes a link as a regular file, or leaves it out.
 
-## Implementation Priority
+## Module notes
 
-### Phase 1: Core (must ship in v0.1.0)
-
-1. **id.py** — DONE. C4 ID computation, parsing, tree IDs. 27/27 cross-language tests pass.
+1. **id.py** — DONE. C4 ID computation, parsing, tree IDs. Cross-language tests in tests/test_id.py.
 
 2. **store.py** — DONE. FSStore with adaptive trie sharding, open_store() config
-   discovery, ContentNotFound error. 13/13 tests pass. Compatible with Go CLI layout.
+   discovery, ContentNotFound error. Compatible with Go CLI layout.
 
 3. **naturalsort.py** — Implement `natural_sort_key()`.
    - Split names into alternating text/numeric segments
@@ -98,7 +96,10 @@ Key interop points:
    - Stat each file for mode, timestamp, size
    - Compute C4 ID for regular files (streaming)
    - When `store` is provided: tee read stream to store.put() (single pass,
-     zero extra I/O). This matches `c4 id -s` in the CLI.
+     zero extra I/O). Like `c4 id -s` in the CLI, except that directory
+     listings are not stored.
+   - Names starting with `.` are skipped (files and folders); `c4 id`
+     keeps them.
    - Record symlink targets
    - Build entry tree with correct depth
    - Sort and compute directory C4 IDs bottom-up
@@ -129,14 +130,9 @@ Key interop points:
     - Verify bare C4 ID patch boundaries match accumulated content
     - Reference: Go `c4m/validator.go`
 
-### Phase 2: Polish (v0.1.0 nice-to-have)
+### Not implemented yet
 
-- Sequence notation parsing (frame.[0001-0100].exr)
-- Pretty-print with local timezone detection
 - `c4 split` equivalent (extract patch range from chain)
-
-### Phase 3: Future (v0.2.0+)
-
 - Network client integration (absorb current c4-python code)
 - c4git Python API
 - Performance: optional C extension for SHA-512 (hashlib is already C-backed)
@@ -152,11 +148,9 @@ Key interop points:
 
 Test vectors are in `tests/vectors/known_ids.json`, generated from the Go implementation.
 
-To generate additional test vectors:
-```bash
-cd c4  # a checkout of github.com/Avalanche-io/c4
-go run /tmp/c4vectors.go
-```
+Each vector directory's README names the Go test that regenerates it (for
+example `C4M_UPDATE_VECTORS=1 go test ./store -run TestSplitRaceStoreFixture`
+in a checkout of github.com/Avalanche-io/c4).
 
 ## Running Tests
 
@@ -168,6 +162,9 @@ pytest --cov=c4py
 mypy src/
 ruff check src/ tests/
 ```
+
+CI runs `pytest` (`.github/workflows/ci.yml`). `mypy src/` (strict) passes;
+`ruff check` is run by hand and doesn't pass yet.
 
 ## Code Style
 
@@ -210,7 +207,5 @@ All paths are in the Go reference implementation, [github.com/Avalanche-io/c4](h
 - c4m standard (ABNF grammar): `c4m/C4M-STANDARD.md`
 - Unix recipes: `docs/c4m-unix-recipes.md`
 
-**Note:** The c4 v1.0.0 release (branch `release/v1.0`) contains 6 packages:
-`c4`, `c4m`, `store`, `reconcile`, `cmd/c4`, `cmd/c4/internal/scan`.
-Non-essential packages (chunk, transform, db, hashlib, progscan) were stripped.
-Only depend on APIs from the shipping packages.
+**Note:** Depend only on APIs in the packages the c4 line you're matching
+ships (core's release/1.0.x for the 1.0.x line, master for 1.1).
