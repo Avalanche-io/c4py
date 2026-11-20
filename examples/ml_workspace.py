@@ -13,16 +13,17 @@ training corrupts the working directory. All content stored once.
 
     # Create experiment views
     python ml_workspace.py create-experiment exp_cats_dogs \
-        --filter "n02*" --filter "n02085*"
+        --base imagenet-1k.c4m --filter "n02*" --filter "n02085*"
 
     # Materialize an experiment
-    python ml_workspace.py checkout exp_cats_dogs ./data/
+    python ml_workspace.py checkout exp_cats_dogs.c4m ./data/
 
     # After training, reset to clean state
     python ml_workspace.py reset ./data/
 
     # Switch to a different experiment
-    python ml_workspace.py checkout exp_all ./data/
+    python ml_workspace.py create-experiment exp_all --base imagenet-1k.c4m
+    python ml_workspace.py checkout exp_all.c4m ./data/
 
 The key insight: the ./data/ directory is a workspace backed by the
 content store. Checkout morphs it to match any manifest. Content that's

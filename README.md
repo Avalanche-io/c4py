@@ -109,7 +109,7 @@ for entry in manifest:
 
 ### Content Store
 
-c4py shares the same content store as the `c4` CLI and `c4sh`. Content stored by any tool is immediately available to the others.
+c4py reads and writes the same content store as the `c4` CLI and `c4sh` when `C4_STORE` or the `store` line in `~/.c4/config` names one local path: content stored by any of them is available to the others. c4py doesn't read the comma-separated list of stores that `c4` accepts.
 
 ```python
 # Open a store (auto-discovers from C4_STORE env or ~/.c4/config)
@@ -124,7 +124,8 @@ assert store.has(c4id)
 with store.get(c4id) as f:  # a binary file object
     content = f.read()
 
-# Scan + store in one pass (zero extra I/O)
+# Scan + store in one pass (zero extra I/O). File content only:
+# unlike `c4 id -s`, directory listings aren't stored.
 manifest = c4py.scan("/projects/HERO", store=store)
 ```
 
@@ -172,7 +173,7 @@ All tools share the same content store and produce identical C4 IDs.
 
 ## Compatibility
 
-c4py produces byte-identical output to the [Go reference implementation](https://github.com/Avalanche-io/c4). Cross-language test vectors ensure this.
+c4py produces byte-identical output to the [Go reference implementation](https://github.com/Avalanche-io/c4) for the same tree, except that `scan()` skips names starting with `.` (files and folders), which `c4 id` includes, so a tree holding one has a different C4 ID. Cross-language test vectors check the rest.
 
 Zero external dependencies. Pure Python. Works offline.
 

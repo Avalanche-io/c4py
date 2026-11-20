@@ -4,7 +4,8 @@ Scans a directory tree, computing C4 IDs for each file and building
 a c4m manifest that describes the complete filesystem state.
 
 When a Store is provided, content is stored as it's identified — single pass
-over the data, zero extra I/O. This matches `c4 id -s` in the Go CLI.
+over the data, zero extra I/O. Like `c4 id -s` in the Go CLI, except that
+only file content is stored: directory listings are not.
 
 Memory trade-off: For files up to 100 MB, content is read into memory once
 and used for both C4 ID computation and store put. For files larger than
@@ -49,7 +50,8 @@ def scan(
     Args:
         path: directory to scan
         store: if provided, store content while identifying (zero extra I/O —
-               bytes are already being read for hashing). Equivalent to `c4 id -s`.
+               bytes are already being read for hashing). Like `c4 id -s`,
+               except that directory listings are not stored.
         follow_symlinks: if True, follow symlinks when scanning
         compute_ids: if True, compute C4 IDs for all files (slower but complete)
         progress: optional callback called after each file is processed.
@@ -61,7 +63,8 @@ def scan(
         Manifest describing the directory contents
 
     The scanner:
-    1. Walks the directory tree (os.walk)
+    1. Walks the directory tree (os.walk), skipping every name that
+       starts with "." (files and folders), which `c4 id` keeps
     2. For each file: stat for metadata, compute C4 ID (streaming)
     3. If store is provided: read once, identify + store (single pass for
        files <= 100 MB; temp file for larger files)
