@@ -15,7 +15,7 @@ import os
 import stat
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from .decoder import load
@@ -206,8 +206,9 @@ def _execute_plan(
     for rel_path, entry in manifest.flat_entries():
         meta[rel_path] = entry
 
-    # Track directories whose timestamps we need to set (deepest first).
-    dir_timestamps: list[tuple[str, datetime]] = []
+    # Directories this reconcile made. Their modes are applied after every
+    # child is written (see the pass below the loop).
+    made: set[str] = set()
 
     for idx, op in enumerate(plan.operations):
         if progress is not None:
@@ -217,18 +218,9 @@ def _execute_plan(
 
         try:
             if op.type == "mkdir":
-                made = not full.is_dir()
+                if not full.is_dir():
+                    made.add(op.path)
                 full.mkdir(parents=True, exist_ok=True)
-                mkdir_entry = meta.get(op.path)
-                if mkdir_entry is not None:
-                    _apply_dir_meta(full, mkdir_entry)
-                    if not is_null_timestamp(mkdir_entry.timestamp):
-                        dir_timestamps.append((op.path, mkdir_entry.timestamp))
-                    elif made:
-                        # A folder this reconcile made from a null timestamp
-                        # gets the epoch, which scans back as null; an
-                        # existing one keeps its time (core dfd6e12).
-                        dir_timestamps.append((op.path, _EPOCH))
                 result.created += 1
 
             elif op.type == "create":
@@ -261,30 +253,35 @@ def _execute_plan(
         except Exception as exc:  # noqa: BLE001
             result.errors.append(f"{op.type} {op.path}: {exc}")
 
-    # Apply directory timestamps deepest-first so that child writes don't
-    # clobber the parent timestamp we already set.
-    for rel_path, ts in sorted(dir_timestamps, key=lambda t: t[0].count("/"), reverse=True):
+    # Directory metadata, after every child is written, deepest first: a
+    # folder's time and mode are set before its parent's, so a parent whose
+    # recorded mode has no owner write or search (dr-xr-xr-x, d---------)
+    # never blocks what lies under it. Time goes before mode, so the utime is
+    # not refused by the mode the folder is about to get. Through 1.0.26 a
+    # made folder took its mode as soon as it was made, so the files and
+    # folders under a dr-xr-xr-x or d--------- folder could not be written,
+    # and the failures came back only in the returned errors.
+    dirs = [(p, e) for p, e in manifest.flat_entries() if e.is_dir()]
+    for rel_path, entry in sorted(dirs, key=lambda t: t[0].count("/"), reverse=True):
         full = directory / rel_path
-        if full.is_dir():
-            epoch = _truncate_to_seconds(ts)
-            try:
-                os.utime(str(full), (epoch, epoch))
-            except OSError:
-                pass
-
-    # Also set timestamps for pre-existing directories (not created by mkdir ops).
-    for rel_path, entry in manifest.flat_entries():
-        if not entry.is_dir():
+        if not full.is_dir():
             continue
-        if is_null_timestamp(entry.timestamp):
-            continue
-        full = directory / rel_path
-        if full.is_dir():
+        if not is_null_timestamp(entry.timestamp):
             epoch = _truncate_to_seconds(entry.timestamp)
+        elif rel_path in made:
+            # A folder this reconcile made from a null timestamp gets the
+            # epoch, which scans back as null; an existing one keeps its time
+            # (core dfd6e12).
+            epoch = 0.0
+        else:
+            epoch = None
+        if epoch is not None:
             try:
                 os.utime(str(full), (epoch, epoch))
             except OSError:
                 pass
+        if rel_path in made:
+            _apply_dir_meta(full, entry)
 
     return result
 
@@ -301,9 +298,6 @@ def _write_from_store(dest: Path, c4id: C4ID, store: Store) -> None:
                 f.write(chunk)
     finally:
         reader.close()
-
-
-_EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
 
 
 def _apply_file_meta(path: Path, entry: Entry, *, fresh: bool) -> None:
@@ -337,7 +331,7 @@ def _apply_file_meta(path: Path, entry: Entry, *, fresh: bool) -> None:
 
 
 def _apply_dir_meta(path: Path, entry: Entry) -> None:
-    """Set permissions on a directory (timestamps are deferred)."""
+    """Set permissions on a directory this reconcile made, after its children."""
     if entry.mode != 0:
         perms = stat.S_IMODE(entry.mode)
         try:
