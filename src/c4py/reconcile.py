@@ -210,6 +210,7 @@ def _execute_plan(
     # written (deepest first): writing children would clobber a parent's
     # mtime, and a known zero mode ("d---------") would lock us out of a
     # directory we still have to fill.
+    made: set[str] = set()  # directories this reconcile created
 
     for idx, op in enumerate(plan.operations):
         if progress is not None:
@@ -219,6 +220,8 @@ def _execute_plan(
 
         try:
             if op.type == "mkdir":
+                if not full.is_dir():
+                    made.add(op.path)
                 full.mkdir(parents=True, exist_ok=True)
                 result.created += 1
 
@@ -227,7 +230,7 @@ def _execute_plan(
                 create_entry = meta.get(op.path)
                 if create_entry is not None and create_entry.c4id is not None:
                     _write_from_store(full, create_entry.c4id, store)
-                    _apply_file_meta(full, create_entry)
+                    _apply_file_meta(full, create_entry, fresh=True)
                 else:
                     full.touch()
                 result.created += 1
@@ -236,7 +239,7 @@ def _execute_plan(
                 update_entry = meta.get(op.path)
                 if update_entry is not None and update_entry.c4id is not None:
                     _write_from_store(full, update_entry.c4id, store)
-                    _apply_file_meta(full, update_entry)
+                    _apply_file_meta(full, update_entry, fresh=True)
                 result.updated += 1
 
             elif op.type == "remove":
@@ -256,14 +259,16 @@ def _execute_plan(
     # are set before its parent is closed, so a parent at "d---------"
     # never blocks the utime/chmod of what lies under it. Timestamp goes
     # before mode so the utime is not refused by the mode it is about to
-    # get. Nulls never overwrite: a null timestamp leaves the directory's
-    # time alone, and a null mode leaves whatever mkdir gave it.
+    # get. Nulls never overwrite: a null timestamp leaves an existing
+    # directory's time alone, and a null mode leaves whatever mkdir gave it.
+    # A directory this reconcile made from a null timestamp gets the epoch,
+    # which scans back as null.
     dirs = [(p, e) for p, e in manifest.flat_entries() if e.is_dir()]
     for rel_path, entry in sorted(dirs, key=lambda t: t[0].count("/"), reverse=True):
         full = directory / rel_path
         if not full.is_dir():
             continue
-        _apply_dir_meta(full, entry)
+        _apply_dir_meta(full, entry, fresh=rel_path in made)
 
     return result
 
@@ -282,40 +287,55 @@ def _write_from_store(dest: Path, c4id: C4ID, store: Store) -> None:
         reader.close()
 
 
-def _apply_file_meta(path: Path, entry: Entry) -> None:
+def _apply_file_meta(path: Path, entry: Entry, *, fresh: bool) -> None:
     """Set permissions and timestamps on a file.
 
     A null mode is never applied (the file keeps the platform default it
     was created with, or the mode it already had). The known zero mode
     (ZERO_MODE, "----------") applies as chmod 0000: S_IMODE strips the
     sentinel bit along with the type bits.
+
+    *fresh* says this reconcile wrote the file's content (a create, or an
+    overwrite of different content, as core's apply treats both). A null
+    timestamp then becomes the epoch, which scans back as null, so the
+    tree reads back at the description's ID. Through 1.0.26 it was left at
+    the time of writing.
     """
     if not is_null_mode(entry.mode):
         _chmod(path, entry.mode)
-
-    if not is_null_timestamp(entry.timestamp):
-        epoch = _truncate_to_seconds(entry.timestamp)
-        try:
-            os.utime(str(path), (epoch, epoch))
-        except OSError:
-            pass
+    _set_time(path, entry, fresh)
 
 
-def _apply_dir_meta(path: Path, entry: Entry) -> None:
+def _apply_dir_meta(path: Path, entry: Entry, *, fresh: bool) -> None:
     """Set a directory's timestamp, then its permissions.
 
     Called after the directory's children are written. Order matters: a
     known zero mode ("d---------") set first would refuse the utime.
+    *fresh* says this reconcile made the directory: a null timestamp then
+    becomes the epoch; on one that already existed a null never overwrites.
+    """
+    _set_time(path, entry, fresh)
+    if not is_null_mode(entry.mode):
+        _chmod(path, entry.mode)
+
+
+def _set_time(path: Path, entry: Entry, fresh: bool) -> None:
+    """Apply *entry*'s timestamp; a null one only to a fresh path, as the epoch.
+
+    Core's reconcile/apply.go setMetadata (dfd6e12): a null never overwrites
+    what an existing path has, and a path this apply made from a null
+    timestamp gets the epoch.
     """
     if not is_null_timestamp(entry.timestamp):
         epoch = _truncate_to_seconds(entry.timestamp)
-        try:
-            os.utime(str(path), (epoch, epoch))
-        except OSError:
-            pass
-
-    if not is_null_mode(entry.mode):
-        _chmod(path, entry.mode)
+    elif fresh:
+        epoch = 0.0
+    else:
+        return
+    try:
+        os.utime(str(path), (epoch, epoch))
+    except OSError:
+        pass
 
 
 def _chmod(path: Path, mode: int) -> None:

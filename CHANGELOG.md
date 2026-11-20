@@ -2,6 +2,20 @@
 
 ## Unreleased (1.1)
 
+### ⚠ Behaviour change: reconcile gives the epoch to a file or folder it creates from a null timestamp
+
+**Behaviour change.** A null timestamp (`-`) means the time is unknown.
+`reconcile` (and `Workspace.checkout`, and a bundle's `extract.sh` when it
+uses c4py) left a file or folder it created from one at the time it was
+written. So a tree materialised from a null-dated description read back
+dated, and at a different C4 ID. Now a file whose content reconcile writes
+(a create, or an overwrite of different content) and a folder it makes get
+the epoch, which scans back as null, so the tree reads back at the
+description's ID. A path that already exists is never given a null time:
+it keeps its own. This is core's rule (`reconcile/apply.go`, dfd6e12).
+Measured before the change: an epoch-dated tree, scanned and reconciled
+into an empty folder, came back dated with the time of the run.
+
 ### ⚠ A time inside the epoch second is null, for entries a caller builds too
 
 **Convergence fixed.** An entry built in memory with a time inside the
