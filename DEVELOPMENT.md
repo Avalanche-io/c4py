@@ -208,4 +208,4 @@ All paths are in the Go reference implementation, [github.com/Avalanche-io/c4](h
 - Unix recipes: `docs/c4m-unix-recipes.md`
 
 **Note:** Depend only on APIs in the packages the c4 line you're matching
-ships (core's release/1.0.x for the 1.0.x line, master for 1.1).
+ships (core's release/1.0.x for the 1.0.x line, master for main).
